@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(z3mp LANGUAGES CXX)
+project(any_precision LANGUAGES CXX)
 
-add_library(z3mp STATIC 
+add_library(${PROJECT_NAME} STATIC 
   src/util/mpn.h
   src/util/mpn.cpp
   src/util/mpz.h
@@ -13,11 +13,13 @@ add_library(z3mp STATIC
   src/util/bit_util.cpp
 )
 
-target_compile_features(z3mp PUBLIC cxx_std_20)
+target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 
-target_compile_definitions(z3mp PUBLIC _MP_INTERNAL)
+target_compile_definitions(${PROJECT_NAME} PUBLIC _MP_INTERNAL)
 
-target_include_directories(z3mp
+target_link_libraries(${PROJECT_NAME} PUBLIC m)
+
+target_include_directories(${PROJECT_NAME}
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
