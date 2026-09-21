@@ -21,6 +21,7 @@ Revision History:
 #include <iomanip>
 #include <stdexcept>
 #include <cstdint>
+#include <cmath>
 #include "util/mpz.h"
 #include "util/hash.h"
 #include "util/bit_util.h"
