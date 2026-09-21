@@ -2,9 +2,16 @@ cmake_minimum_required(VERSION 3.20)
 
 project(z3mp LANGUAGES CXX)
 
-file(GLOB SRCS LIST_DIRECTORIES FALSE "${CMAKE_CURRENT_SOURCE_DIR}/src/util/*.cpp")
-
-add_library(z3mp STATIC ${SRCS})
+add_library(z3mp STATIC 
+  src/util/mpn.h
+  src/util/mpn.cpp
+  src/util/mpz.h
+  src/util/mpz.cpp
+  src/util/hash.h
+  src/util/hash.cpp
+  src/util/bit_util.h
+  src/util/bit_util.cpp
+)
 
 target_compile_features(z3mp PUBLIC cxx_std_20)
 
