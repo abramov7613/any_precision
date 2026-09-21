@@ -53,12 +53,12 @@ cpp_int random_cpp_int(std::mt19937_64& generator, unsigned bits) {
 
 TEST(MpzTest1, BoundaryValuesRoundTrip) {
     manager_t manager;
-    const std::vector<std::pair<cpp_int, cpp_int>> cases = {
-        {cpp_int(0), cpp_int(0)},
-        {cpp_int(0), cpp_int(-42)},
-        {cpp_int(-48), cpp_int(18)},
-        {cpp_int(48), cpp_int(18)},
-        {cpp_int("12345678901234567890"), cpp_int("9876543210")}
+    const std::vector<std::string> values = {
+        "-2147483649", "-2147483648", "-2147483647",
+        "-1", "0", "1",
+        "2147483646", "2147483647", "2147483648", "2147483649",
+        "-9223372036854775808", "9223372036854775807",
+        "18446744073709551615"
     };
 
     for (const std::string& expected : values) {
@@ -143,8 +143,11 @@ TEST(MpzTest1, DivisionRemainderAndModuloMatchReference) {
 TEST(MpzTest1, GcdLcmDividesAndExtendedGcd) {
     manager_t manager;
     const std::vector<std::pair<cpp_int, cpp_int>> cases = {
-        {0, 0}, {0, -42}, {-48, 18}, {48, 18},
-        {"12345678901234567890", "9876543210"}
+        {cpp_int(0), cpp_int(0)},
+        {cpp_int(0), cpp_int(-42)},
+        {cpp_int(-48), cpp_int(18)},
+        {cpp_int(48), cpp_int(18)},
+        {cpp_int("12345678901234567890"), cpp_int("9876543210")}
     };
 
     for (const auto& [a, b] : cases) {
