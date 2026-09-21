@@ -18,9 +18,8 @@ Revision History:
 --*/
 #pragma once
 
-#include<ostream>
-#include "util/util.h"
-#include "util/buffer.h"
+#include <ostream>
+#include <vector>
 
 typedef unsigned int mpn_digit;
 
@@ -51,9 +50,7 @@ public:
     char * to_string(mpn_digit const * a, unsigned lng,
                      char * buf, unsigned lbuf) const;
 private:
-    using mpn_sbuffer = sbuffer<mpn_digit>;
-
-    void display_raw(std::ostream & out, mpn_digit const * a, unsigned lng) const;
+    using mpn_sbuffer = std::vector<mpn_digit>;
 
     unsigned div_normalize(mpn_digit const * numer, unsigned lnum,
                          mpn_digit const * denom, unsigned lden,
@@ -69,11 +66,4 @@ private:
     bool div_n(mpn_sbuffer & numer, mpn_sbuffer const & denom,
                mpn_digit * quot, mpn_digit * rem,
                mpn_sbuffer & ms, mpn_sbuffer & ab) const;
-
-    void trace(mpn_digit const * a, unsigned lnga,
-               mpn_digit const * b, unsigned lngb,
-               const char * op) const;
-
-    void trace(mpn_digit const * a, unsigned lnga) const;
-    void trace_nl(mpn_digit const * a, unsigned lnga) const;
 };
