@@ -22,7 +22,7 @@ Revision History:
 #include <string>
 #include <cassert>
 #include <vector>
-#include "util/mpn.h"
+#include "mpn.h"
 
 unsigned u_gcd(unsigned u, unsigned v);
 uint64_t u64_gcd(uint64_t u, uint64_t v);

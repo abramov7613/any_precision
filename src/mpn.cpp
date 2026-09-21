@@ -18,7 +18,7 @@ Revision History:
 --*/
 #include <cassert>
 #include <cstdint>
-#include "util/mpn.h"
+#include "mpn.h"
 
 typedef uint64_t mpn_double_digit;
 static_assert(sizeof(mpn_double_digit) == 2 * sizeof(mpn_digit), "size alignment");
