@@ -1360,36 +1360,33 @@ void mpz_manager<SYNCH>::gcd(mpz const & r1, mpz const & r2, mpz & a, mpz & b, m
 }
 
 template<bool SYNCH>
-void mpz_manager<SYNCH>::lcm(mpz const & a, mpz const & b, mpz & c) {
+void mpz_manager<SYNCH>::lcm(mpz const& a, mpz const& b, mpz& c) {
+    if (is_zero(a) || is_zero(b)) {
+        set_zero(c);
+        return;
+    }
     if (is_one(b)) {
         set(c, a);
-        TRACE(lcm_bug, tout << "1. lcm(" << to_string(a) << ", " << to_string(b) << ") = " << to_string(c) << "\n";);
     }
     else if (is_one(a) || eq(a, b)) {
         set(c, b);
-        TRACE(lcm_bug, tout << "2. lcm(" << to_string(a) << ", " << to_string(b) << ") = " << to_string(c) << "\n";);
     }
     else {
         mpz r;
         gcd(a, b, r);
-        TRACE(lcm_bug, tout << "gcd(" << to_string(a) << ", " << to_string(b) << ") = " << to_string(r) << "\n";);
         if (eq(r, a)) {
             set(c, b);
-            TRACE(lcm_bug, tout << "3. lcm(" << to_string(a) << ", " << to_string(b) << ") = " << to_string(c) << "\n";);
         }
         else if (eq(r, b)) {
             set(c, a);
-            TRACE(lcm_bug, tout << "4. lcm(" << to_string(a) << ", " << to_string(b) << ") = " << to_string(c) << "\n";);
         }
         else {
-            // c contains gcd(a, b)   
-            // so c divides a, and machine_div(a, c) is equal to div(a, c)
             machine_div(a, r, r);
             mul(r, b, c);
-            TRACE(lcm_bug, tout << "5. lcm(" << to_string(a) << ", " << to_string(b) << ") = " << to_string(c) << "\n";);
         }
         del(r);
     }
+    abs(c);
 }
 
 template<bool SYNCH>
