@@ -1360,11 +1360,7 @@ void mpz_manager<SYNCH>::gcd(mpz const & r1, mpz const & r2, mpz & a, mpz & b, m
 }
 
 template<bool SYNCH>
-void mpz_manager<SYNCH>::lcm(mpz const& a, mpz const& b, mpz& c) {
-    if (is_zero(a) || is_zero(b)) {
-        set_zero(c);
-        return;
-    }
+void mpz_manager<SYNCH>::lcm(mpz const & a, mpz const & b, mpz & c) {
     if (is_one(b)) {
         set(c, a);
     }
@@ -1381,12 +1377,13 @@ void mpz_manager<SYNCH>::lcm(mpz const& a, mpz const& b, mpz& c) {
             set(c, a);
         }
         else {
+            // c contains gcd(a, b)
+            // so c divides a, and machine_div(a, c) is equal to div(a, c)
             machine_div(a, r, r);
             mul(r, b, c);
         }
         del(r);
     }
-    abs(c);
 }
 
 template<bool SYNCH>
