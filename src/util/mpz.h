@@ -18,13 +18,11 @@ Revision History:
 --*/
 #pragma once
 
-#include<string>
-#include "util/mutex.h"
-#include "util/util.h"
+#include <climits>
+#include <string>
+#include <cassert>
+#include <vector>
 #include "util/small_object_allocator.h"
-#include "util/trace.h"
-#include "util/scoped_numeral.h"
-#include "util/scoped_numeral_vector.h"
 #include "util/mpn.h"
 
 unsigned u_gcd(unsigned u, unsigned v);
@@ -32,71 +30,40 @@ uint64_t u64_gcd(uint64_t u, uint64_t v);
 unsigned trailing_zeros(uint64_t);
 unsigned trailing_zeros(uint32_t);
 
-
-#ifdef _MP_GMP
-typedef unsigned digit_t;
-#endif
-
-#ifdef _MSC_VER
-#pragma warning(disable : 4200)
-#endif
-
 template<bool SYNCH> class mpz_manager;
-template<bool SYNCH> class mpq_manager;
 
-#if !defined(_MP_GMP) && !defined(_MP_INTERNAL)
-#ifdef _WINDOWS
-#define _MP_INTERNAL
-#else
-#define _MP_GMP
-#endif
-#endif
-
-#ifndef _MP_GMP
 typedef unsigned int digit_t;
-class mpz_cell {
+typedef int qr_mode;
+
+struct mpz_cell {
     unsigned  m_size;
     unsigned  m_capacity;
     digit_t   m_digits[0];
-    friend class mpz_manager<true>;
-    friend class mpz_manager<false>;
-    friend class mpz_stack;
 };
-#else
-#include<gmp.h>
-#endif
 
 /**
    \brief Multi-precision integer.
-   
+
    If m_kind == mpz_small, it is a small number and the value is stored in m_val.
    If m_kind == mpz_large,   the value is stored in m_ptr and m_ptr != nullptr.
-                           m_val contains the sign (-1 negative, 1 positive)   
-                           under winodws, m_ptr points to a mpz_cell that store the value. 
+                           m_val contains the sign (-1 negative, 1 positive)
+                           under winodws, m_ptr points to a mpz_cell that store the value.
 */
-
 enum mpz_kind { mpz_small = 0, mpz_large = 1};
 enum mpz_owner { mpz_self = 0, mpz_ext = 1};
 
 class mpz {
-#ifndef _MP_GMP
     typedef mpz_cell mpz_type;
-#else
-    typedef mpz_t mpz_type;
-#endif
+
 protected:
-    int        m_val; 
+    int        m_val;
     unsigned   m_kind:1;
     unsigned   m_owner:1;
     mpz_type * m_ptr;
     friend class mpz_manager<true>;
     friend class mpz_manager<false>;
-    friend class mpq_manager<true>;
-    friend class mpq_manager<false>;
-    friend class mpq;
-    friend class mpbq;
-    friend class mpbq_manager;
     friend class mpz_stack;
+
 public:
     mpz(int v = 0) noexcept : m_val(v), m_kind(mpz_small), m_owner(mpz_self), m_ptr(nullptr) {}
     mpz(mpz_type* ptr) noexcept : m_val(0), m_kind(mpz_small), m_owner(mpz_ext), m_ptr(ptr) { SASSERT(ptr); }
@@ -125,9 +92,8 @@ public:
     inline int value() const { SASSERT(is_small());  return m_val; }
 
     inline int sign() const { SASSERT(!is_small()); return m_val; }
-};
+}; // class mpz
 
-#ifndef _MP_GMP
 class mpz_stack : public mpz {
     static const unsigned capacity = 8;
     unsigned char m_bytes[sizeof(mpz_cell) + sizeof(digit_t) * capacity];
@@ -135,37 +101,25 @@ public:
     mpz_stack():mpz(reinterpret_cast<mpz_cell*>(m_bytes)) {
         m_ptr->m_capacity = capacity;
     }
-};
-#else
-class mpz_stack : public mpz {};
-#endif
+}; // class mpz_stack
 
 inline void swap(mpz & m1, mpz & m2) noexcept { m1.swap(m2); }
 
 template<bool SYNCH = true>
 class mpz_manager {
     mutable small_object_allocator  m_allocator;
-#ifndef SINGLE_THREAD
-    mutable std::recursive_mutex    m_lock;
-#define MPZ_BEGIN_CRITICAL() if (SYNCH) m_lock.lock()
-#define MPZ_END_CRITICAL()   if (SYNCH) m_lock.unlock()
-#else
-#define MPZ_BEGIN_CRITICAL() {}
-#define MPZ_END_CRITICAL()   {}
-#endif
     mutable mpn_manager             m_mpn_manager;
 
-#ifndef _MP_GMP
     // 64-bit machine?
     static const unsigned m_init_cell_capacity = sizeof(digit_t) == sizeof(uint64_t) ? 4 : 6;
     mpz                   m_int_min;
-    
-    static unsigned cell_size(unsigned capacity) { 
-        return sizeof(mpz_cell) + sizeof(digit_t) * capacity; 
+
+    static unsigned cell_size(unsigned capacity) {
+        return sizeof(mpz_cell) + sizeof(digit_t) * capacity;
     }
 
     mpz_cell * allocate(unsigned capacity);
-    
+
     // make sure that n is a big number and has capacity equal to at least c.
     void allocate_if_needed(mpz & n, unsigned c) {
         if (m_init_cell_capacity > c) c = m_init_cell_capacity;
@@ -182,7 +136,7 @@ class mpz_manager {
     }
 
     void deallocate(bool is_heap, mpz_cell * ptr);
-    
+
     // Expand capacity of a while preserving its content.
     void ensure_capacity(mpz & a, unsigned sz);
 
@@ -194,44 +148,7 @@ class mpz_manager {
        \brief Set \c a with the value stored at src, and the given sign.
        \c sz is an overapproximation of the size of the number stored at \c src.
     */
-    void set(mpz_cell& src, mpz & a, int sign, unsigned sz); 
-
-
-#else
-    // GMP code
-    mutable mpz_t     m_tmp, m_tmp2;
-    mutable mpz_t     m_two32;
-    mpz_t  *  m_arg[2];
-    mutable mpz_t     m_uint64_max;
-    mutable mpz_t     m_int64_max;
-    mutable mpz_t     m_int64_min;
-
-    mpz_t * allocate() {        
-        mpz_t * cell;
-        if (SYNCH) {
-            cell = reinterpret_cast<mpz_t*>(memory::allocate(sizeof(mpz_t)));
-        }
-        else {
-            cell = reinterpret_cast<mpz_t*>(m_allocator.allocate(sizeof(mpz_t)));        
-        }
-        mpz_init(*cell);
-        return cell;
-    }
-
-    void deallocate(bool is_heap, mpz_t * ptr) { 
-        mpz_clear(*ptr); 
-        if (is_heap) {
-            if (SYNCH) {
-                memory::deallocate(ptr);
-            }
-            else {
-                m_allocator.deallocate(sizeof(mpz_t), ptr); 
-            }
-        }
-    }
-
-    void clear(mpz& n) { if (n.m_ptr) { mpz_clear(*n.m_ptr); }}
-#endif
+    void set(mpz_cell& src, mpz & a, int sign, unsigned sz);
 
     void deallocate(mpz& n) {
         if (n.m_ptr) {
@@ -241,8 +158,7 @@ class mpz_manager {
         }
     }
 
-    mpz                     m_two64;
-
+    mpz m_two64;
 
     static int64_t i64(mpz const & a) { return static_cast<int64_t>(a.value()); }
 
@@ -250,7 +166,7 @@ class mpz_manager {
 
     void set_i64(mpz & c, int64_t v) {
         if (v >= INT_MIN && v <= INT_MAX) {
-            c.set(static_cast<int>(v));             
+            c.set(static_cast<int>(v));
         }
         else {
             set_big_i64(c, v);
@@ -258,9 +174,6 @@ class mpz_manager {
     }
 
     void set_big_ui64(mpz & c, uint64_t v);
-
-
-#ifndef _MP_GMP
 
     static unsigned capacity(mpz const & c) { return c.m_ptr->m_capacity; }
 
@@ -277,7 +190,7 @@ class mpz_manager {
         else
             return size(a) <= 2;
     }
-    
+
     // CAST the absolute value into a UINT64
     static uint64_t big_abs_to_uint64(mpz const & a) {
         SASSERT(is_abs_uint64(a));
@@ -287,7 +200,7 @@ class mpz_manager {
         if (sizeof(digit_t) == sizeof(uint64_t))
             // 64-bit machine
             return digits(a)[0];
-        else 
+        else
             // 32-bit machine
             return ((static_cast<uint64_t>(digits(a)[1]) << 32) | (static_cast<uint64_t>(digits(a)[0])));
     }
@@ -330,34 +243,8 @@ class mpz_manager {
         }
     }
 
-#else
-    // GMP code
-
-    class ensure_mpz_t {
-        mpz_t m_local;
-        mpz_t* m_result;
-    public:
-        ensure_mpz_t(mpz const& a);
-        ~ensure_mpz_t();
-        mpz_t& operator()() { return *m_result; }
-    };
-    
-    void mk_big(mpz & a) {
-        if (a.m_ptr == nullptr) {
-            a.m_val = 0;
-            a.m_ptr = allocate();
-            a.m_owner = mpz_self;
-        }
-        a.m_kind = mpz_large;
-    }
-
-
-#endif 
-
-#ifndef _MP_GMP
     template<bool SUB>
     void big_add_sub(mpz const & a, mpz const & b, mpz & c);
-#endif
 
     void big_add(mpz const & a, mpz const & b, mpz & c);
 
@@ -367,16 +254,8 @@ class mpz_manager {
 
     void big_set(mpz & target, mpz const & source);
 
-#ifndef _MP_GMP
-
-#define QUOT_ONLY 0
-#define REM_ONLY  1
-#define QUOT_AND_REM 2
-#define qr_mode int
-    
     template<qr_mode MODE>
     void quot_rem_core(mpz const & a, mpz const & b, mpz & q, mpz & r);
-#endif
 
     void big_div_rem(mpz const & a, mpz const & b, mpz & q, mpz & r);
 
@@ -402,15 +281,15 @@ public:
     static bool is_small(mpz const & a) { return a.is_small(); }
 
     static mpz mk_z(int val) { return mpz(val); }
-    
+
     void del(mpz & a) { del(this, a); }
 
     static void del(mpz_manager* m, mpz & a);
-    
+
     void add(mpz const & a, mpz const & b, mpz & c);
 
     void sub(mpz const & a, mpz const & b, mpz & c);
-    
+
     void inc(mpz & a) { add(a, mpz(1), a); }
 
     void dec(mpz & a) { add(a, mpz(-1), a); }
@@ -444,20 +323,11 @@ public:
     static bool is_pos(mpz const & a) { return sign(a) > 0; }
 
     static bool is_neg(mpz const & a) { return sign(a) < 0; }
-    
+
     static bool is_zero(mpz const & a) { return sign(a) == 0; }
 
-    static int sign(mpz const & a) {
-#ifndef _MP_GMP
-        return a.m_val;
-#else
-        if (is_small(a))
-            return a.m_val;
-        else
-            return mpz_sgn(*a.m_ptr);
-#endif
-    }
-    
+    static int sign(mpz const & a) { return a.m_val; }
+
     static bool is_nonpos(mpz const & a) { return !is_pos(a); }
 
     static bool is_nonneg(mpz const & a) { return !is_neg(a); }
@@ -498,9 +368,9 @@ public:
     bool le(mpz const & a, mpz const & b) { return !lt(b, a); }
 
     void gcd(mpz const & a, mpz const & b, mpz & c);
-    
+
     void gcd(unsigned sz, mpz const * as, mpz & g);
-    
+
     /**
        \brief Extended Euclid:
        r1*a + r2*b = g
@@ -586,16 +456,16 @@ public:
     int64_t get_int64(mpz const & a) const;
 
     bool is_uint(mpz const & a) const { return is_uint64(a) && get_uint64(a) < UINT_MAX; }
-    
+
     unsigned get_uint(mpz const & a) const { SASSERT(is_uint(a)); return static_cast<unsigned>(get_uint64(a)); }
 
     bool is_int(mpz const & a) const { return is_int64(a) && INT_MIN < get_int64(a) && get_int64(a) < INT_MAX; }
-    
+
     int get_int(mpz const & a) const { SASSERT(is_int(a)); return static_cast<int>(get_int64(a)); }
 
     double get_double(mpz const & a) const;
 
-    std::string to_string(mpz const & a) const; 
+    std::string to_string(mpz const & a) const;
 
     void display(std::ostream & out, mpz const & a) const;
 
@@ -619,36 +489,20 @@ public:
 
     static unsigned hash(mpz const & a);
 
-    static bool is_one(mpz const & a) {
-#ifndef _MP_GMP
-        return is_small(a) && a.value() == 1;
-#else
-        if (is_small(a))
-            return a.value() == 1;
-        return mpz_cmp_si(*a.m_ptr, 1) == 0;
-#endif
-    }
+    static bool is_one(mpz const & a) { return is_small(a) && a.value() == 1; }
 
-    static bool is_minus_one(mpz const & a) {
-#ifndef _MP_GMP
-        return is_small(a) && a.value() == -1;
-#else
-        if (is_small(a))
-            return a.value() == -1;
-        return mpz_cmp_si(*a.m_ptr, -1) == 0;
-#endif
-    }
+    static bool is_minus_one(mpz const & a) { return is_small(a) && a.value() == -1; }
 
     void power(mpz const & a, unsigned p, mpz & b);
 
-    bool is_power_of_two(mpz const & a); 
+    bool is_power_of_two(mpz const & a);
 
     bool is_power_of_two(mpz const & a, unsigned & shift);
-    
+
     void machine_div2k(mpz & a, unsigned k);
 
     void machine_div2k(mpz const & a, unsigned k, mpz & r) { set(r, a); machine_div2k(r, k); }
-    
+
     void mul2k(mpz & a, unsigned k);
 
     void mul2k(mpz const & a, unsigned k, mpz & r) { set(r, a); mul2k(r, k); }
@@ -674,18 +528,18 @@ public:
        \brief Return the bit-size of n. This method is mainly used for collecting statistics.
     */
     unsigned bitsize(mpz const & n);
-    
+
     /**
-       \brief Return true if the number is a perfect square, and 
+       \brief Return true if the number is a perfect square, and
        store the square root in 'root'.
        If the number n is positive and the result is false, then
        root will contain the smallest integer r such that r*r > n.
     */
     bool is_perfect_square(mpz const & a, mpz & root);
-    
+
     /**
        \brief Return the biggest k s.t. 2^k <= a.
-       
+
        \remark Return 0 if a is not positive.
     */
     unsigned prev_power_of_two(mpz const & a) { return log2(a); }
@@ -696,12 +550,12 @@ public:
        \remark Return 0 if a is not positive.
     */
     unsigned next_power_of_two(mpz const & a);
-    
+
     /**
        \brief Return true if a^{1/n} is an integer, and store the result in a.
        Otherwise return false, and update a with the smallest
        integer r such that r*r > n.
-       
+
        \remark This method assumes that if n is even, then a is nonegative
     */
     bool root(mpz & a, unsigned n);
@@ -710,31 +564,18 @@ public:
     bool is_even(mpz const & a) {
         if (is_small(a))
             return !(a.value() & 0x1);
-#ifndef _MP_GMP
         return !(0x1 & digits(a)[0]);
-#else
-        return mpz_even_p(*a.m_ptr);
-#endif        
     }
 
     bool is_odd(mpz const & n) { return !is_even(n); }
-    
+
     // Store the digits of n into digits, and return the sign.
-    bool decompose(mpz const & n, svector<digit_t> & digits);
+    bool decompose(mpz const & n, std::vector<digit_t> & digits);
 
     bool get_bit(mpz const& a, unsigned bit);
 
     digit_t get_least_significant(mpz const& a);
+}; // class mpz_manager
 
-};
-
-#ifndef SINGLE_THREAD
-typedef mpz_manager<true> synch_mpz_manager;
-#else
 typedef mpz_manager<false> synch_mpz_manager;
-#endif
 typedef mpz_manager<false> unsynch_mpz_manager;
-
-typedef _scoped_numeral<unsynch_mpz_manager> scoped_mpz;
-typedef _scoped_numeral<synch_mpz_manager> scoped_synch_mpz;
-typedef _scoped_numeral_vector<unsynch_mpz_manager> scoped_mpz_vector;
