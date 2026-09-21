@@ -16,19 +16,15 @@ Author:
 Revision History:
 
 --*/
-#include "util/debug.h"
-#include "util/trace.h"
-#include "util/buffer.h"
+#include <cassert>
 #include "util/mpn.h"
 
 typedef uint64_t mpn_double_digit;
 static_assert(sizeof(mpn_double_digit) == 2 * sizeof(mpn_digit), "size alignment");
 
-int mpn_manager::compare(mpn_digit const * a, unsigned lnga, 
+int mpn_manager::compare(mpn_digit const * a, unsigned lnga,
                          mpn_digit const * b, unsigned lngb) const {
     int res = 0;
-
-    trace(a, lnga);
 
     unsigned j = std::max(lnga, lngb);
     for (; j-- > 0 && res == 0;) {
@@ -40,9 +36,6 @@ int mpn_manager::compare(mpn_digit const * a, unsigned lnga,
             res = -1;
     }
 
-    TRACE(mpn, tout << ((res == 1) ? " > " : (res == -1) ? " < " : " == "); );
-    
-    trace_nl(b, lngb);
     return res;
 }
 
@@ -50,10 +43,9 @@ bool mpn_manager::add(mpn_digit const * a, unsigned lnga,
                       mpn_digit const * b, unsigned lngb,
                       mpn_digit * c, unsigned lngc_alloc,
                       unsigned * plngc) const {
-    trace(a, lnga, b, lngb, "+");
     // Essentially Knuth's Algorithm A
     unsigned len = std::max(lnga, lngb);
-    SASSERT(lngc_alloc == len+1 && len > 0);    
+    assert(lngc_alloc == len+1 && len > 0);
     mpn_digit k = 0;
     mpn_digit r;
     bool c1, c2;
@@ -67,15 +59,13 @@ bool mpn_manager::add(mpn_digit const * a, unsigned lnga,
     c[len] = k;
     unsigned &os = *plngc;
     for (os = len+1; os > 1 && c[os-1] == 0; ) os--;
-    SASSERT(os > 0 && os <= len+1);
-    trace_nl(c, os);
+    assert(os > 0 && os <= len+1);
     return true; // return k != 0?
 }
 
 bool mpn_manager::sub(mpn_digit const * a, unsigned lnga,
                       mpn_digit const * b, unsigned lngb,
                       mpn_digit * c, mpn_digit * pborrow) const {
-    trace(a, lnga, b, lngb, "-");
     // Essentially Knuth's Algorithm S
     unsigned len = std::max(lnga, lngb);
     mpn_digit & k = *pborrow; k = 0;
@@ -88,16 +78,14 @@ bool mpn_manager::sub(mpn_digit const * a, unsigned lnga,
         c[j] = r - k;  c2 = c[j] > r;
         k = c1 | c2;
     }
-    trace_nl(c, lnga);
     return true; // return k != 0?
 }
 
 bool mpn_manager::mul(mpn_digit const * a, unsigned lnga,
                       mpn_digit const * b, unsigned lngb,
                       mpn_digit * c) const {
-    trace(a, lnga, b, lngb, "*");
-    // Essentially Knuth's Algorithm M. 
-    // Perhaps implement a more efficient version, see e.g., Knuth, Section 4.3.3.    
+    // Essentially Knuth's Algorithm M.
+    // Perhaps implement a more efficient version, see e.g., Knuth, Section 4.3.3.
     unsigned i;
     mpn_digit k;
 
@@ -107,7 +95,7 @@ bool mpn_manager::mul(mpn_digit const * a, unsigned lnga,
     for (unsigned i = 0; i < lnga; ++i)
         c[i] = 0;
 
-    for (unsigned j = 0; j < lngb; ++j) {        
+    for (unsigned j = 0; j < lngb; ++j) {
         mpn_digit v_j = b[j];
         if (v_j == 0) { // This branch may be omitted according to Knuth.
             c[j+lnga] = 0;
@@ -117,18 +105,17 @@ bool mpn_manager::mul(mpn_digit const * a, unsigned lnga,
             for (i = 0; i < lnga; ++i) {
                 mpn_digit u_i = a[i];
                 mpn_double_digit t;
-                t = ((mpn_double_digit)u_i * (mpn_double_digit)v_j) + 
-                    (mpn_double_digit) c[i+j] + 
+                t = ((mpn_double_digit)u_i * (mpn_double_digit)v_j) +
+                    (mpn_double_digit) c[i+j] +
                     (mpn_double_digit) k;
-                
+
                 c[i+j] = (t << DIGIT_BITS) >> DIGIT_BITS;
                 k = t >> DIGIT_BITS;
             }
             c[j+lnga] = k;
-        }        
+        }
     }
-    
-    trace_nl(c, lnga+lngb);
+
     return true;
 }
 
@@ -141,8 +128,7 @@ bool mpn_manager::div(mpn_digit const * numer, unsigned lnum,
                       mpn_digit const * denom, unsigned lden,
                       mpn_digit * quot,
                       mpn_digit * rem) {
-    trace(numer, lnum, denom, lden, "/");
-    bool res = false;    
+    bool res = false;
 
     if (lnum < lden) {
         for (unsigned i = 0; i < (lnum-lden+1); ++i)
@@ -152,17 +138,17 @@ bool mpn_manager::div(mpn_digit const * numer, unsigned lnum,
         return false;
     }
 
-    SASSERT(denom[lden-1] != 0);
+    assert(denom[lden-1] != 0);
 
     if (lnum == 1 && lden == 1) {
         *quot = numer[0] / denom[0];
         *rem  = numer[0] % denom[0];
     }
     else if (lnum < lden || (lnum == lden && numer[lnum-1] < denom[lden-1])) {
-        *quot = 0;        
+        *quot = 0;
         for (unsigned i = 0; i < lden; ++i)
-            rem[i] = (i < lnum) ? numer[i] : 0;       
-    }        
+            rem[i] = (i < lnum) ? numer[i] : 0;
+    }
     else  {
         mpn_sbuffer u, v, t_ms, t_ab;
         unsigned d = div_normalize(numer, lnum, denom, lden, u, v);
@@ -170,28 +156,8 @@ bool mpn_manager::div(mpn_digit const * numer, unsigned lnum,
             res = div_1(u, v[0], quot);
         else
             res = div_n(u, v, quot, rem, t_ms, t_ab);
-        div_unnormalize(u, v, d, rem);    
+        div_unnormalize(u, v, d, rem);
     }
-
-    // TRACE(mpn_dbg, display_raw(tout, quot, lnum - lden + 1); tout << ", ";
-    //                  display_raw(tout, rem, lden); tout << std::endl; );
-    trace_nl(quot, lnum-lden+1);
-
-    trace(numer, lnum, denom, lden, "%");
-    trace_nl(rem, lden);
-
-#ifdef Z3DEBUG
-    mpn_sbuffer temp(lnum+1, 0);
-    mul(quot, lnum-lden+1, denom, lden, temp.data());
-    unsigned real_size;
-    add(temp.data(), lnum, rem, lden, temp.data(), lnum+1, &real_size);
-    bool ok = true;
-    for (unsigned i = 0; i < lnum && ok; ++i)
-        if (temp[i] != numer[i]) ok = false;
-    if (temp[lnum] != 0) ok = false;
-    CTRACE(mpn_dbg, !ok, tout << "DIV BUG: quot * denom + rem = "; display_raw(tout, temp.data(), lnum+1); tout << std::endl; );
-    SASSERT(ok);
-#endif
 
     return res;
 }
@@ -200,14 +166,14 @@ unsigned mpn_manager::div_normalize(mpn_digit const * numer, unsigned lnum,
                                   mpn_digit const * denom, unsigned lden,
                                   mpn_sbuffer & n_numer,
                                   mpn_sbuffer & n_denom) const
-{    
+{
     unsigned d = 0;
     while (lden > 0 && ((denom[lden-1] << d) & MASK_FIRST) == 0) d++;
-    SASSERT(d < DIGIT_BITS);
-    
+    assert(d < DIGIT_BITS);
+
     n_numer.resize(lnum+1);
     n_denom.resize(lden);
-    
+
     if (d == 0) {
         n_numer[lnum] = 0;
         for (unsigned i = 0; i < lnum; ++i)
@@ -216,22 +182,20 @@ unsigned mpn_manager::div_normalize(mpn_digit const * numer, unsigned lnum,
             n_denom[i] = denom[i];
     }
     else if (lnum != 0) {
-        SASSERT(lden > 0);
+        assert(lden > 0);
         mpn_digit q = FIRST_BITS(d, numer[lnum-1]);
         n_numer[lnum] = q;
         for (unsigned i = lnum-1; i > 0; i--)
             n_numer[i] = (numer[i] << d) | FIRST_BITS(d, numer[i-1]);
-        n_numer[0] = numer[0] << d; 
+        n_numer[0] = numer[0] << d;
         for (unsigned i = lden-1; i > 0; i--)
             n_denom[i] = denom[i] << d | FIRST_BITS(d, denom[i-1]);
-        n_denom[0] = denom[0] << d;   
+        n_denom[0] = denom[0] << d;
     }
     else {
         d = 0;
     }
 
-    TRACE(mpn_norm, tout << "Normalized: n_numer="; display_raw(tout, n_numer.data(), n_numer.size()); 
-                      tout << " n_denom="; display_raw(tout, n_denom.data(), n_denom.size()); tout << std::endl; );
     return d;
 }
 
@@ -256,10 +220,7 @@ bool mpn_manager::div_1(mpn_sbuffer & numer, mpn_digit const denom,
     for (unsigned j = numer.size()-1; j > 0; j--) {
         temp = (((mpn_double_digit)numer[j]) << DIGIT_BITS) | ((mpn_double_digit)numer[j-1]);
         q_hat = temp / (mpn_double_digit) denom;
-        if (q_hat >= BASE) {
-            UNREACHABLE(); // is this reachable with normalized v?
-        }
-        SASSERT(q_hat < BASE);
+        assert(q_hat < BASE);
         ms = temp - (q_hat * (mpn_double_digit) denom);
         borrow = ms > temp;
         numer[j-1] = (mpn_digit) ms;
@@ -269,13 +230,6 @@ bool mpn_manager::div_1(mpn_sbuffer & numer, mpn_digit const denom,
             quot[j-1]--;
             numer[j] = numer[j-1] + denom;
         }
-        TRACE(mpn_div1, 
-              mpn_double_digit r_hat = temp % (mpn_double_digit) denom;
-              tout << "j=" << j << " q_hat=" << q_hat << " r_hat=" << r_hat;
-              tout << " ms=" << ms;
-              tout << " new numer="; display_raw(tout, numer.data(), numer.size());
-              tout << " borrow=" << borrow;
-              tout << std::endl; );
     }
 
     return true; // return rem != 0?
@@ -284,16 +238,16 @@ bool mpn_manager::div_1(mpn_sbuffer & numer, mpn_digit const denom,
 bool mpn_manager::div_n(mpn_sbuffer & numer, mpn_sbuffer const & denom,
                         mpn_digit * quot, mpn_digit * rem,
                         mpn_sbuffer & ms, mpn_sbuffer & ab) const {
-    SASSERT(denom.size() > 1);
+    assert(denom.size() > 1);
 
     // This is essentially Knuth's Algorithm D.
     unsigned m = numer.size() - denom.size();
     unsigned n = denom.size();
 
-    SASSERT(numer.size() == m+n);
+    assert(numer.size() == m+n);
 
     ms.resize(n+1);
-    
+
     mpn_double_digit q_hat, temp, r_hat;
     mpn_digit borrow;
 
@@ -302,14 +256,14 @@ bool mpn_manager::div_n(mpn_sbuffer & numer, mpn_sbuffer const & denom,
         q_hat = temp / (mpn_double_digit) denom[n-1];
         r_hat = temp % (mpn_double_digit) denom[n-1];
         recheck:
-        if (q_hat >= BASE || 
+        if (q_hat >= BASE ||
             ((q_hat * denom[n-2]) > ((r_hat << DIGIT_BITS) + numer[j+n-2]))) {
                 q_hat--;
                 r_hat += denom[n-1];
                 if (r_hat < BASE) goto recheck;
         }
-        SASSERT(q_hat < BASE);        
-        // Replace numer[j+n]...numer[j] with 
+        assert(q_hat < BASE);
+        // Replace numer[j+n]...numer[j] with
         // numer[j+n]...numer[j] - q * (denom[n-1]...denom[0])
         mpn_digit q_hat_small = (mpn_digit)q_hat;
         mul(&q_hat_small, 1, denom.data(), n, ms.data());
@@ -323,19 +277,13 @@ bool mpn_manager::div_n(mpn_sbuffer & numer, mpn_sbuffer const & denom,
             for (unsigned i = 0; i < n+1; ++i)
                 numer[j+i] = ab[i];
         }
-        TRACE(mpn_div, tout << "q_hat=" << q_hat << " r_hat=" << r_hat;
-                         tout << " ms="; display_raw(tout, ms.data(), n);
-                         tout << " new numer="; display_raw(tout, numer.data(), m+n+1);
-                         tout << " borrow=" << borrow;
-                         tout << std::endl; );
     }
-    
+
     return true; // return rem != 0?
 }
 
 char * mpn_manager::to_string(mpn_digit const * a, unsigned lng, char * buf, unsigned lbuf) const {
-    SASSERT(buf && lbuf > 0);    
-    TRACE(mpn_to_string, tout << "[mpn] to_string "; display_raw(tout, a, lng); tout << " == "; );
+    assert(buf && lbuf > 0);
 
     if (lng == 1) {
 #ifdef _WINDOWS
@@ -348,10 +296,10 @@ char * mpn_manager::to_string(mpn_digit const * a, unsigned lng, char * buf, uns
         mpn_sbuffer temp(lng, 0), t_numer(lng+1, 0), t_denom(1, 0);
         for (unsigned i = 0; i < lng; ++i)
             temp[i] = a[i];
-    
+
         unsigned j = 0;
         mpn_digit rem;
-        mpn_digit ten = 10;        
+        mpn_digit ten = 10;
         while (!temp.empty() && (temp.size() > 1 || temp[0] != 0)) {
             unsigned d = div_normalize(&temp[0], temp.size(), &ten, 1, t_numer, t_denom);
             div_1(t_numer, t_denom[0], &temp[0]);
@@ -363,43 +311,9 @@ char * mpn_manager::to_string(mpn_digit const * a, unsigned lng, char * buf, uns
         buf[j] = 0;
 
         j--;
-        unsigned mid = (j/2) + ((j % 2) ? 1 : 0);        
+        unsigned mid = (j/2) + ((j % 2) ? 1 : 0);
         for (unsigned i = 0; i < mid; ++i)
             std::swap(buf[i], buf[j-i]);
     }
-
-    TRACE(mpn_to_string, tout << buf << std::endl; );
-
     return buf;
-}
-
-void mpn_manager::display_raw(std::ostream & out, mpn_digit const * a, unsigned lng) const {
-    out << "[";
-    for (unsigned i = lng; i-- > 0; ) { out << a[i]; if (i != 0) out << "|"; }
-    out << "]";
-}
-
-void mpn_manager::trace(mpn_digit const * a, unsigned lnga, 
-                        mpn_digit const * b, unsigned lngb, 
-                        const char * op) const {
-#ifdef Z3DEBUG
-    char char_buf[4096];
-    TRACE(mpn, tout << "[mpn] " << to_string(a, lnga, char_buf, sizeof(char_buf));
-                 tout << " " << op << " " << to_string(b, lngb, char_buf, sizeof(char_buf));
-                 tout << " == "; );
-#endif
-}
-
-void mpn_manager::trace(mpn_digit const * a, unsigned lnga) const {
-#ifdef Z3DEBUG
-    char char_buf[4096];
-    TRACE(mpn, tout << to_string(a, lnga, char_buf, sizeof(char_buf)); );
-#endif
-}
-
-void mpn_manager::trace_nl(mpn_digit const * a, unsigned lnga) const {
-#ifdef Z3DEBUG
-    char char_buf[4096];
-    TRACE(mpn, tout << to_string(a, lnga, char_buf, sizeof(char_buf)) << std::endl; );
-#endif
 }
