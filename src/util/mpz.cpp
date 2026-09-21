@@ -27,7 +27,6 @@ Revision History:
 #include <string_view>
 
 #include "util/mpz.h"
-#include "util/bit_util.h"
 
 constexpr auto QUOT_ONLY = 0;
 constexpr auto REM_ONLY = 1;
