@@ -34,6 +34,7 @@ include(GoogleTest)
 
 add_executable(mpz_tests
     test_mpz.cpp
+    test_mpz1.cpp
 )
 
 target_compile_features(mpz_tests PRIVATE cxx_std_20)
