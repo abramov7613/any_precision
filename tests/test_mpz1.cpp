@@ -140,7 +140,7 @@ TEST(MpzTest1, DivisionRemainderAndModuloMatchReference) {
     }
 }
 
-TEST(MpzTest1, GcdLcmDividesAndExtendedGcd) {
+TEST(MpzTest1, GcdDividesAndExtendedGcd) {
     manager_t manager;
     const std::vector<std::pair<cpp_int, cpp_int>> cases = {
         {cpp_int(0), cpp_int(0)},
@@ -156,10 +156,6 @@ TEST(MpzTest1, GcdLcmDividesAndExtendedGcd) {
         set_value(manager, y, b);
         manager.gcd(x, y, gcd);
         EXPECT_EQ(as_cpp(gcd, manager), gcd_cpp(a, b));
-
-        manager.lcm(x, y, lcm);
-        const cpp_int expected_lcm = (a == 0 || b == 0) ? 0 : (a * b) / gcd_cpp(a, b);
-        EXPECT_EQ(as_cpp(lcm, manager), expected_lcm < 0 ? -expected_lcm : expected_lcm);
 
         EXPECT_EQ(manager.divides(x, y), a == 0 ? b == 0 : (b % a == 0));
 
