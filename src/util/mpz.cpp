@@ -19,6 +19,7 @@ Revision History:
 #include <cstring>
 #include <sstream>
 #include <iomanip>
+#include <limits>
 #include <stdexcept>
 #include <cstdint>
 #include <bit>
@@ -1769,7 +1770,7 @@ bool mpz_manager<SYNCH>::is_power_of_two(mpz const & a, unsigned & shift) {
     if (is_nonpos(a))
         return false;
     if (is_small(a)) {
-        if (::is_power_of_two(a.m_val)) {
+        if (std::has_single_bit(static_cast<unsigned>(a.m_val))) {
             shift = std::bit_width(static_cast<unsigned>(a.m_val)) - 1;
             return true;
         }
@@ -2043,7 +2044,7 @@ unsigned mpz_manager<SYNCH>::log2(mpz const & a) {
     unsigned sz      = c->m_size;
     digit_t * ds     = c->m_digits;
     if (sizeof(digit_t) == 8)
-        return (sz - 1)*64 + uint64_log2(ds[sz-1]);
+        return (sz - 1) * 64 + std::bit_width(static_cast<uint64_t>(ds[sz - 1])) - 1;
     else
         return (sz - 1) * 32 + std::bit_width(static_cast<unsigned>(ds[sz - 1])) - 1;
 }
@@ -2062,7 +2063,7 @@ unsigned mpz_manager<SYNCH>::mlog2(mpz const & a) {
     unsigned sz      = c->m_size;
     digit_t * ds     = c->m_digits;
     if (sizeof(digit_t) == 8)
-        return (sz - 1)*64 + uint64_log2(ds[sz-1]);
+        return (sz - 1) * 64 + std::bit_width(static_cast<uint64_t>(ds[sz - 1])) - 1;
     else
         return (sz - 1) * 32 + std::bit_width(static_cast<unsigned>(ds[sz - 1])) - 1;
 }
