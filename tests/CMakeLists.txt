@@ -4,8 +4,8 @@ if(NOT Boost_FOUND)
   # Fallback to FetchContent
   include(FetchContent)
   FetchContent_Declare(boost_multiprecision
-      GIT_REPOSITORY https://github.com/boostorg/multiprecision.git
-      GIT_TAG        boost-1.92.0
+      URL https://github.com/boostorg/multiprecision/archive/refs/tags/Boost_1_92_0.tar.gz
+      URL_HASH SHA256=d53a907779b1ba88c80c15953c24106bf92b1b4731678441a8655e527c9d3df1
   )
   FetchContent_MakeAvailable(boost_multiprecision)
   if(NOT TARGET boost_multiprecision)
