@@ -20,6 +20,7 @@ Revision History:
 #include <sstream>
 #include <iomanip>
 #include <stdexcept>
+#include <cstdint>
 #include "util/mpz.h"
 #include "util/hash.h"
 #include "util/bit_util.h"
