@@ -26,9 +26,9 @@ if(NOT GTest_FOUND)
   )
   set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
   FetchContent_MakeAvailable(googletest)
-  if(NOT TARGET GTest::gtest_main)
-      message(FATAL_ERROR "Google Test not found")
-  endif()
+endif()
+if(NOT TARGET GTest::gtest_main)
+    message(FATAL_ERROR "Google Test not found")
 endif()
 include(GoogleTest)
 
@@ -40,7 +40,7 @@ add_executable(mpz_tests
 target_compile_features(mpz_tests PRIVATE cxx_std_20)
 
 target_link_libraries(mpz_tests PRIVATE
-    z3mp
+    ${PROJECT_NAME}
     GTest::gtest_main
     Boost::multiprecision
 )
