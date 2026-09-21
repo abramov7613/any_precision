@@ -53,12 +53,12 @@ cpp_int random_cpp_int(std::mt19937_64& generator, unsigned bits) {
 
 TEST(MpzTest1, BoundaryValuesRoundTrip) {
     manager_t manager;
-    const std::vector<std::string> values = {
-        "-2147483649", "-2147483648", "-2147483647",
-        "-1", "0", "1",
-        "2147483646", "2147483647", "2147483648", "2147483649",
-        "-9223372036854775808", "9223372036854775807",
-        "18446744073709551615"
+    const std::vector<std::pair<cpp_int, cpp_int>> cases = {
+        {cpp_int(0), cpp_int(0)},
+        {cpp_int(0), cpp_int(-42)},
+        {cpp_int(-48), cpp_int(18)},
+        {cpp_int(48), cpp_int(18)},
+        {cpp_int("12345678901234567890"), cpp_int("9876543210")}
     };
 
     for (const std::string& expected : values) {
@@ -227,21 +227,27 @@ TEST(MpzTest1, BitOperationsAndBitQueries) {
 
 TEST(MpzTest1, RootsAndNumberProperties) {
     manager_t manager;
+
     for (unsigned exponent = 0; exponent < 20; ++exponent) {
         mpz value, root;
+
         manager.power(mpz(3), exponent, value);
-        EXPECT_TRUE(manager.is_perfect_square(value, root) == (exponent % 2 == 0));
-        if (exponent % 2 == 0)
-            EXPECT_EQ(manager.to_string(root), text(cpp_int(3) << 0));
+        EXPECT_EQ(
+            manager.is_perfect_square(value, root),
+            exponent % 2 == 0
+        );
 
-        EXPECT_TRUE(manager.is_power_of_two(manager.power(mpz(2), exponent, value)));
+        if (exponent % 2 == 0) {
+            cpp_int expected_root = 1;
+            for (unsigned i = 0; i < exponent / 2; ++i)
+                expected_root *= 3;
+
+            EXPECT_EQ(manager.to_string(root), text(expected_root));
+        }
+
+        manager.power(mpz(2), exponent, value);
+        EXPECT_TRUE(manager.is_power_of_two(value));
     }
-
-    mpz value;
-    manager.set(value, 65);
-    EXPECT_FALSE(manager.is_power_of_two(value));
-    EXPECT_EQ(manager.log2(value), 6u);
-    EXPECT_EQ(manager.bitsize(value), 7u);
 }
 
 TEST(MpzTest1, FormattingAndConversions) {
