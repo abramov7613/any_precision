@@ -22,7 +22,6 @@ Revision History:
 #include <string>
 #include <cassert>
 #include <vector>
-#include "util/small_object_allocator.h"
 #include "util/mpn.h"
 
 unsigned u_gcd(unsigned u, unsigned v);
@@ -107,7 +106,6 @@ inline void swap(mpz & m1, mpz & m2) noexcept { m1.swap(m2); }
 
 template<bool SYNCH = true>
 class mpz_manager {
-    mutable small_object_allocator  m_allocator;
     mutable mpn_manager             m_mpn_manager;
 
     // 64-bit machine?
