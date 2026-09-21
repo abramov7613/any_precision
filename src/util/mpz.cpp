@@ -296,8 +296,7 @@ uint64_t u64_gcd(uint64_t u, uint64_t v) {
 
 
 template<bool SYNCH>
-mpz_manager<SYNCH>::mpz_manager():
-    m_allocator("mpz_manager") {
+mpz_manager<SYNCH>::mpz_manager() {
     set(m_int_min, -static_cast<int64_t>(INT_MIN));
     mpz one(1);
     set(m_two64, (uint64_t)UINT64_MAX);
@@ -311,29 +310,20 @@ mpz_manager<SYNCH>::~mpz_manager() {
 }
 
 template<bool SYNCH>
-mpz_cell * mpz_manager<SYNCH>::allocate(unsigned capacity) {
+mpz_cell* mpz_manager<SYNCH>::allocate(unsigned capacity) {
     assert(capacity >= m_init_cell_capacity);
-    mpz_cell * cell;
-    if (SYNCH) {
-        cell = reinterpret_cast<mpz_cell*>(memory::allocate(cell_size(capacity)));
-    }
-    else {
-        cell = reinterpret_cast<mpz_cell*>(m_allocator.allocate(cell_size(capacity)));
-    }
-    cell->m_capacity = capacity;
 
+    auto* cell = static_cast<mpz_cell*>(
+        ::operator new(cell_size(capacity)));
+
+    cell->m_capacity = capacity;
     return cell;
 }
 
 template<bool SYNCH>
-void mpz_manager<SYNCH>::deallocate(bool is_heap, mpz_cell * ptr) {
+void mpz_manager<SYNCH>::deallocate(bool is_heap, mpz_cell* ptr) {
     if (is_heap) {
-        if (SYNCH) {
-            memory::deallocate(ptr);
-        }
-        else {
-            m_allocator.deallocate(cell_size(ptr->m_capacity), ptr);
-        }
+        ::operator delete(ptr);
     }
 }
 
