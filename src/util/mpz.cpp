@@ -22,8 +22,10 @@ Revision History:
 #include <stdexcept>
 #include <cstdint>
 #include <bit>
+#include <functional>
+#include <string_view>
+
 #include "util/mpz.h"
-#include "util/hash.h"
 #include "util/bit_util.h"
 
 constexpr auto QUOT_ONLY = 0;
@@ -1694,13 +1696,19 @@ std::string mpz_manager<SYNCH>::to_string(mpz const & a) const {
 }
 
 template<bool SYNCH>
-unsigned mpz_manager<SYNCH>::hash(mpz const & a) {
-    if (is_small(a))
-        return ::abs(a.m_val);
+unsigned mpz_manager<SYNCH>::hash(mpz const& a) {
+    if (is_small(a)) {
+        return static_cast<unsigned>(static_cast<std::uint32_t>(a.m_val));
+    }
     unsigned sz = size(a);
-    if (sz == 1)
+    if (sz == 1) {
         return static_cast<unsigned>(digits(a)[0]);
-    return string_hash(std::string_view(reinterpret_cast<char*>(digits(a)), sz * sizeof(digit_t)), 17);
+    }
+    auto bytes = std::string_view(
+        reinterpret_cast<char const*>(digits(a)),
+        sz * sizeof(digit_t)
+    );
+    return static_cast<unsigned>(std::hash<std::string_view>{}(bytes));
 }
 
 template<bool SYNCH>
