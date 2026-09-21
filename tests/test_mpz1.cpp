@@ -4,11 +4,9 @@
 #include <sstream>
 #include <string>
 #include <vector>
-
 #include <gtest/gtest.h>
 #include <boost/multiprecision/cpp_int.hpp>
-
-#include "util/mpz.h"
+#include "mpz.h"
 
 using boost::multiprecision::cpp_int;
 using manager_t = mpz_manager<false>;
