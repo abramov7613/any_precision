@@ -65,7 +65,7 @@ protected:
 
 public:
     mpz(int v = 0) noexcept : m_val(v), m_kind(mpz_small), m_owner(mpz_self), m_ptr(nullptr) {}
-    mpz(mpz_type* ptr) noexcept : m_val(0), m_kind(mpz_small), m_owner(mpz_ext), m_ptr(ptr) { SASSERT(ptr); }
+    mpz(mpz_type* ptr) noexcept : m_val(0), m_kind(mpz_small), m_owner(mpz_ext), m_ptr(ptr) { assert(ptr); }
     mpz(mpz && other) noexcept : mpz() { swap(other); }
 
     mpz& operator=(mpz const& other) = delete;
@@ -88,9 +88,9 @@ public:
 
     inline bool is_small() const { return m_kind == mpz_small; }
 
-    inline int value() const { SASSERT(is_small());  return m_val; }
+    inline int value() const { assert(is_small());  return m_val; }
 
-    inline int sign() const { SASSERT(!is_small()); return m_val; }
+    inline int sign() const { assert(!is_small()); return m_val; }
 }; // class mpz
 
 class mpz_stack : public mpz {
@@ -106,6 +106,7 @@ inline void swap(mpz & m1, mpz & m2) noexcept { m1.swap(m2); }
 
 template<bool SYNCH = true>
 class mpz_manager {
+    mutable small_object_allocator  m_allocator;
     mutable mpn_manager             m_mpn_manager;
 
     // 64-bit machine?
@@ -191,8 +192,8 @@ class mpz_manager {
 
     // CAST the absolute value into a UINT64
     static uint64_t big_abs_to_uint64(mpz const & a) {
-        SASSERT(is_abs_uint64(a));
-        SASSERT(!is_small(a));
+        assert(is_abs_uint64(a));
+        assert(!is_small(a));
         if (a.m_ptr->m_size == 1)
             return digits(a)[0];
         if (sizeof(digit_t) == sizeof(uint64_t))
@@ -384,7 +385,7 @@ public:
 
     // not a field
     void inv(mpz & a) {
-        SASSERT(false);
+        assert(false);
     }
 
     void bitwise_or(mpz const & a, mpz const & b, mpz & c);
@@ -455,11 +456,11 @@ public:
 
     bool is_uint(mpz const & a) const { return is_uint64(a) && get_uint64(a) < UINT_MAX; }
 
-    unsigned get_uint(mpz const & a) const { SASSERT(is_uint(a)); return static_cast<unsigned>(get_uint64(a)); }
+    unsigned get_uint(mpz const & a) const { assert(is_uint(a)); return static_cast<unsigned>(get_uint64(a)); }
 
     bool is_int(mpz const & a) const { return is_int64(a) && INT_MIN < get_int64(a) && get_int64(a) < INT_MAX; }
 
-    int get_int(mpz const & a) const { SASSERT(is_int(a)); return static_cast<int>(get_int64(a)); }
+    int get_int(mpz const & a) const { assert(is_int(a)); return static_cast<int>(get_int64(a)); }
 
     double get_double(mpz const & a) const;
 
