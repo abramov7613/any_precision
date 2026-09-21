@@ -115,7 +115,7 @@ TEST(MpzTest1, ArithmeticMatchesReference) {
 
 TEST(MpzTest1, DivisionRemainderAndModuloMatchReference) {
     manager_t manager;
-    std::mt19937_64 generator(0xD1V1234ULL);
+    std::mt19937_64 generator(0xD1A1234ULL);
 
     for (int i = 0; i < 250; ++i) {
         const cpp_int a = random_cpp_int(generator, 512);
@@ -144,7 +144,7 @@ TEST(MpzTest1, GcdLcmDividesAndExtendedGcd) {
     manager_t manager;
     const std::vector<std::pair<cpp_int, cpp_int>> cases = {
         {0, 0}, {0, -42}, {-48, 18}, {48, 18},
-        {"12345678901234567890"_cpp, "9876543210"_cpp}
+        {"12345678901234567890", "9876543210"}
     };
 
     for (const auto& [a, b] : cases) {
