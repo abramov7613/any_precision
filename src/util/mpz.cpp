@@ -21,7 +21,7 @@ Revision History:
 #include <iomanip>
 #include <stdexcept>
 #include <cstdint>
-#include <cmath>
+#include <bit>
 #include "util/mpz.h"
 #include "util/hash.h"
 #include "util/bit_util.h"
@@ -1762,7 +1762,7 @@ bool mpz_manager<SYNCH>::is_power_of_two(mpz const & a, unsigned & shift) {
         return false;
     if (is_small(a)) {
         if (::is_power_of_two(a.m_val)) {
-            shift = ::log2((unsigned)a.m_val);
+            shift = std::bit_width(static_cast<unsigned>(a.m_val)) - 1;
             return true;
         }
         else {
@@ -2029,7 +2029,7 @@ unsigned mpz_manager<SYNCH>::log2(mpz const & a) {
     if (is_nonpos(a))
         return 0;
     if (is_small(a))
-        return ::log2((unsigned)a.m_val);
+        return std::bit_width(static_cast<unsigned>(a.m_val)) - 1;
     static_assert(sizeof(digit_t) == 8 || sizeof(digit_t) == 4, "");
     mpz_cell * c     = a.m_ptr;
     unsigned sz      = c->m_size;
@@ -2037,7 +2037,7 @@ unsigned mpz_manager<SYNCH>::log2(mpz const & a) {
     if (sizeof(digit_t) == 8)
         return (sz - 1)*64 + uint64_log2(ds[sz-1]);
     else
-        return (sz - 1)*32 + ::log2(static_cast<unsigned>(ds[sz-1]));
+        return (sz - 1) * 32 + std::bit_width(static_cast<unsigned>(ds[sz - 1])) - 1;
 }
 
 template<bool SYNCH>
@@ -2045,10 +2045,10 @@ unsigned mpz_manager<SYNCH>::mlog2(mpz const & a) {
     if (is_nonneg(a))
         return 0;
     if (is_small(a) && a.m_val == INT_MIN)
-        return ::log2((unsigned)a.m_val);
+        return std::bit_width(static_cast<unsigned>(a.m_val)) - 1;
 
     if (is_small(a))
-        return ::log2((unsigned)-a.m_val);
+        return std::bit_width(static_cast<unsigned>(-a.m_val)) - 1;
     static_assert(sizeof(digit_t) == 8 || sizeof(digit_t) == 4, "");
     mpz_cell * c     = a.m_ptr;
     unsigned sz      = c->m_size;
@@ -2056,7 +2056,7 @@ unsigned mpz_manager<SYNCH>::mlog2(mpz const & a) {
     if (sizeof(digit_t) == 8)
         return (sz - 1)*64 + uint64_log2(ds[sz-1]);
     else
-        return (sz - 1)*32 + ::log2(static_cast<unsigned>(ds[sz-1]));
+        return (sz - 1) * 32 + std::bit_width(static_cast<unsigned>(ds[sz - 1])) - 1;
 }
 
 template<bool SYNCH>
