@@ -50,8 +50,10 @@ static uint64_t _trailing_zeros64(uint64_t x) {
 
 #undef HAS_BUILTIN
 
+
 #define _bit_min(x, y) (y + ((x - y) & ((int)(x - y) >> 31)))
 #define _bit_max(x, y) (x - ((x - y) & ((int)(x - y) >> 31)))
+
 
 template<typename Manager>
 class _scoped_numeral {
@@ -232,6 +234,7 @@ public:
     }
 }; // class _scoped_numeral
 
+
 unsigned u_gcd(unsigned u, unsigned v) {
     if (u == 0) return v;
     if (v == 0) return u;
@@ -250,6 +253,7 @@ unsigned u_gcd(unsigned u, unsigned v) {
     return u << shift;
 }
 
+
 uint64_t u64_gcd(uint64_t u, uint64_t v) {
     if (u == 0) return v;
     if (v == 0) return u;
@@ -266,23 +270,21 @@ uint64_t u64_gcd(uint64_t u, uint64_t v) {
 }
 
 
-
-template<bool SYNCH>
-mpz_manager<SYNCH>::mpz_manager() {
+mpz_manager::mpz_manager() {
     set(m_int_min, -static_cast<int64_t>(INT_MIN));
     mpz one(1);
     set(m_two64, (uint64_t)UINT64_MAX);
     add(m_two64, one, m_two64);
 }
 
-template<bool SYNCH>
-mpz_manager<SYNCH>::~mpz_manager() {
+
+mpz_manager::~mpz_manager() {
     del(m_two64);
     del(m_int_min);
 }
 
-template<bool SYNCH>
-mpz_cell* mpz_manager<SYNCH>::allocate(unsigned capacity) {
+
+mpz_cell* mpz_manager::allocate(unsigned capacity) {
     assert(capacity >= m_init_cell_capacity);
 
     auto* cell = static_cast<mpz_cell*>(
@@ -292,22 +294,23 @@ mpz_cell* mpz_manager<SYNCH>::allocate(unsigned capacity) {
     return cell;
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::deallocate(bool is_heap, mpz_cell* ptr) {
+
+void mpz_manager::deallocate(bool is_heap, mpz_cell* ptr) {
     if (is_heap) {
         ::operator delete(ptr);
     }
 }
 
-template<bool SYNCH>
-mpz_manager<SYNCH>::sign_cell::sign_cell(mpz_manager& m, mpz const& a):
+
+mpz_manager::sign_cell::sign_cell(mpz_manager& m, mpz const& a):
     m_local(reinterpret_cast<mpz_cell*>(m_bytes)), m_a(a) {
     m_local.m_ptr->m_capacity = capacity;
+    m_local.m_ptr->m_size = 0;
     m.get_sign_cell(a, m_sign, m_cell, m_local.m_ptr);
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::del(mpz_manager<SYNCH>* m, mpz & a) {
+
+void mpz_manager::del(mpz_manager* m, mpz & a) {
     if (a.m_ptr) {
         assert(m);
         m->deallocate(a.m_owner == mpz_self, a.m_ptr);
@@ -317,8 +320,8 @@ void mpz_manager<SYNCH>::del(mpz_manager<SYNCH>* m, mpz & a) {
     }
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::add(mpz const & a, mpz const & b, mpz & c) {
+
+void mpz_manager::add(mpz const & a, mpz const & b, mpz & c) {
     if (is_small(a) && is_small(b)) {
         set_i64(c, i64(a) + i64(b));
     }
@@ -327,8 +330,8 @@ void mpz_manager<SYNCH>::add(mpz const & a, mpz const & b, mpz & c) {
     }
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::sub(mpz const & a, mpz const & b, mpz & c) {
+
+void mpz_manager::sub(mpz const & a, mpz const & b, mpz & c) {
     if (is_small(a) && is_small(b)) {
         set_i64(c, i64(a) - i64(b));
     }
@@ -337,8 +340,8 @@ void mpz_manager<SYNCH>::sub(mpz const & a, mpz const & b, mpz & c) {
     }
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::set_big_i64(mpz & c, int64_t v) {
+
+void mpz_manager::set_big_i64(mpz & c, int64_t v) {
     if (c.m_ptr == nullptr) {
         c.m_ptr = allocate(m_init_cell_capacity);
         c.m_owner = mpz_self;
@@ -375,8 +378,8 @@ void mpz_manager<SYNCH>::set_big_i64(mpz & c, int64_t v) {
     }
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::set_big_ui64(mpz & c, uint64_t v) {
+
+void mpz_manager::set_big_ui64(mpz & c, uint64_t v) {
     if (c.m_ptr == nullptr) {
         c.m_ptr = allocate(m_init_cell_capacity);
         c.m_owner = mpz_self;
@@ -397,8 +400,8 @@ void mpz_manager<SYNCH>::set_big_ui64(mpz & c, uint64_t v) {
     }
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::set(mpz_cell& src, mpz & a, int sign, unsigned sz) {
+
+void mpz_manager::set(mpz_cell& src, mpz & a, int sign, unsigned sz) {
     unsigned i = sz;
     for (; i > 0 && src.m_digits[i-1] == 0; --i) ;
 
@@ -422,8 +425,8 @@ void mpz_manager<SYNCH>::set(mpz_cell& src, mpz & a, int sign, unsigned sz) {
     assert(a.m_kind == mpz_large);
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::set(mpz & a, char const * val) {
+
+void mpz_manager::set(mpz & a, char const * val) {
     set(a, 0);
     mpz ten(10);
     mpz tmp;
@@ -445,8 +448,8 @@ void mpz_manager<SYNCH>::set(mpz & a, char const * val) {
         neg(a);
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::set_digits(mpz & target, unsigned sz, digit_t const * digits) {
+
+void mpz_manager::set_digits(mpz & target, unsigned sz, digit_t const * digits) {
     // remove zero digits
     while (sz > 0 && digits[sz - 1] == 0)
         sz--;
@@ -486,8 +489,8 @@ void mpz_manager<SYNCH>::set_digits(mpz & target, unsigned sz, digit_t const * d
     }
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::mul(mpz const & a, mpz const & b, mpz & c) {
+
+void mpz_manager::mul(mpz const & a, mpz const & b, mpz & c) {
     if (is_small(a) && is_small(b)) {
         set_i64(c, i64(a) * i64(b));
     }
@@ -496,9 +499,9 @@ void mpz_manager<SYNCH>::mul(mpz const & a, mpz const & b, mpz & c) {
     }
 }
 
+
 // d <- a + b*c
-template<bool SYNCH>
-void mpz_manager<SYNCH>::addmul(mpz const & a, mpz const & b, mpz const & c, mpz & d) {
+void mpz_manager::addmul(mpz const & a, mpz const & b, mpz const & c, mpz & d) {
     if (is_one(b)) {
         add(a, c, d);
     }
@@ -515,8 +518,7 @@ void mpz_manager<SYNCH>::addmul(mpz const & a, mpz const & b, mpz const & c, mpz
 
 
 // d <- a - b*c
-template<bool SYNCH>
-void mpz_manager<SYNCH>::submul(mpz const & a, mpz const & b, mpz const & c, mpz & d) {
+void mpz_manager::submul(mpz const & a, mpz const & b, mpz const & c, mpz & d) {
     if (is_one(b)) {
         sub(a, c, d);
     }
@@ -532,8 +534,7 @@ void mpz_manager<SYNCH>::submul(mpz const & a, mpz const & b, mpz const & c, mpz
 }
 
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::machine_div_rem(mpz const & a, mpz const & b, mpz & q, mpz & r) {
+void mpz_manager::machine_div_rem(mpz const & a, mpz const & b, mpz & q, mpz & r) {
     if (is_small(a) && is_small(b)) {
         int64_t _a = i64(a);
         int64_t _b = i64(b);
@@ -545,8 +546,8 @@ void mpz_manager<SYNCH>::machine_div_rem(mpz const & a, mpz const & b, mpz & q, 
     }
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::machine_div(mpz const & a, mpz const & b, mpz & c) {
+
+void mpz_manager::machine_div(mpz const & a, mpz const & b, mpz & c) {
     if (is_small(b) && i64(b) == 0)
         throw std::runtime_error("division by 0");
 
@@ -556,14 +557,14 @@ void mpz_manager<SYNCH>::machine_div(mpz const & a, mpz const & b, mpz & c) {
         big_div(a, b, c);
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::reset(mpz & a) {
+
+void mpz_manager::reset(mpz & a) {
     deallocate(a);
     set(a, 0);
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::rem(mpz const & a, mpz const & b, mpz & c) {
+
+void mpz_manager::rem(mpz const & a, mpz const & b, mpz & c) {
     if (is_small(a) && is_small(b)) {
         set_i64(c, i64(a) % i64(b));
     }
@@ -573,8 +574,7 @@ void mpz_manager<SYNCH>::rem(mpz const & a, mpz const & b, mpz & c) {
 }
 
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::div_gcd(mpz const& a, mpz const& b, mpz & c) {
+void mpz_manager::div_gcd(mpz const& a, mpz const& b, mpz & c) {
     if (is_one(b)) {
         set(c, a);
     }
@@ -583,8 +583,8 @@ void mpz_manager<SYNCH>::div_gcd(mpz const& a, mpz const& b, mpz & c) {
     }
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::div(mpz const & a, mpz const & b, mpz & c) {
+
+void mpz_manager::div(mpz const & a, mpz const & b, mpz & c) {
     assert(!is_zero(b));
     if (is_one(b)) {
         set(c, a);
@@ -605,8 +605,8 @@ void mpz_manager<SYNCH>::div(mpz const & a, mpz const & b, mpz & c) {
     }
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::mod(mpz const & a, mpz const & b, mpz & c) {
+
+void mpz_manager::mod(mpz const & a, mpz const & b, mpz & c) {
     rem(a, b, c);
     if (is_neg(c)) {
         if (is_pos(b))
@@ -616,8 +616,8 @@ void mpz_manager<SYNCH>::mod(mpz const & a, mpz const & b, mpz & c) {
     }
 }
 
-template<bool SYNCH>
-mpz mpz_manager<SYNCH>::mod2k(mpz const & a, unsigned k) {
+
+mpz mpz_manager::mod2k(mpz const & a, unsigned k) {
     if (is_zero(a))
         return 0;
 
@@ -681,8 +681,8 @@ mpz mpz_manager<SYNCH>::mod2k(mpz const & a, unsigned k) {
     return result;
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::neg(mpz & a) {
+
+void mpz_manager::neg(mpz & a) {
     if (is_small(a) && a.m_val == INT_MIN) {
         // neg(INT_MIN) is not a small int
         set_big_i64(a, - static_cast<long long>(INT_MIN));
@@ -691,8 +691,8 @@ void mpz_manager<SYNCH>::neg(mpz & a) {
     a.m_val = -a.m_val;
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::abs(mpz & a) {
+
+void mpz_manager::abs(mpz & a) {
     if (is_small(a)) {
         if (a.m_val < 0) {
             if (a.m_val == INT_MIN) {
@@ -710,9 +710,8 @@ void mpz_manager<SYNCH>::abs(mpz & a) {
 
 
 // TBD: replace use of 'tmp' by 'c'.
-template<bool SYNCH>
 template<bool SUB>
-void mpz_manager<SYNCH>::big_add_sub(mpz const & a, mpz const & b, mpz & c) {
+void mpz_manager::big_add_sub(mpz const & a, mpz const & b, mpz & c) {
     sign_cell ca(*this, a), cb(*this, b);
     int sign_b = cb.sign();
     mpz_stack tmp;
@@ -765,18 +764,18 @@ void mpz_manager<SYNCH>::big_add_sub(mpz const & a, mpz const & b, mpz & c) {
     del(tmp);
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::big_add(mpz const & a, mpz const & b, mpz & c) {
+
+void mpz_manager::big_add(mpz const & a, mpz const & b, mpz & c) {
     big_add_sub<false>(a, b, c);
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::big_sub(mpz const & a, mpz const & b, mpz & c) {
+
+void mpz_manager::big_sub(mpz const & a, mpz const & b, mpz & c) {
     big_add_sub<true>(a, b, c);
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::big_mul(mpz const & a, mpz const & b, mpz & c) {
+
+void mpz_manager::big_mul(mpz const & a, mpz const & b, mpz & c) {
     // TBD replace tmp by c.
     mpz_stack tmp;
     sign_cell ca(*this, a), cb(*this, b);
@@ -792,14 +791,14 @@ void mpz_manager<SYNCH>::big_mul(mpz const & a, mpz const & b, mpz & c) {
 }
 
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::big_div_rem(mpz const & a, mpz const & b, mpz & q, mpz & r) {
+
+void mpz_manager::big_div_rem(mpz const & a, mpz const & b, mpz & q, mpz & r) {
     quot_rem_core<QUOT_AND_REM>(a, b, q, r);
 }
 
-template<bool SYNCH>
+
 template<qr_mode MODE>
-void mpz_manager<SYNCH>::quot_rem_core(mpz const & a, mpz const & b, mpz & q, mpz & r)
+void mpz_manager::quot_rem_core(mpz const & a, mpz const & b, mpz & q, mpz & r)
 {
     /*
       +26 / +7 = +3, remainder is +5
@@ -832,24 +831,24 @@ void mpz_manager<SYNCH>::quot_rem_core(mpz const & a, mpz const & b, mpz & q, mp
     del(r1);
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::big_div(mpz const & a, mpz const & b, mpz & c) {
+
+void mpz_manager::big_div(mpz const & a, mpz const & b, mpz & c) {
     mpz dummy;
     quot_rem_core<QUOT_ONLY>(a, b, c, dummy);
     assert(is_zero(dummy));
     del(dummy);
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::big_rem(mpz const & a, mpz const & b, mpz & c) {
+
+void mpz_manager::big_rem(mpz const & a, mpz const & b, mpz & c) {
     mpz dummy;
     quot_rem_core<REM_ONLY>(a, b, dummy, c);
     assert(is_zero(dummy));
     del(dummy);
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::gcd(mpz const & a, mpz const & b, mpz & c) {
+
+void mpz_manager::gcd(mpz const & a, mpz const & b, mpz & c) {
     static_assert(sizeof(a.m_val) == sizeof(int), "size mismatch");
     static_assert(sizeof(mpz) <= 16, "mpz size overflow");
     if (is_small(a) && is_small(b) && a.m_val != INT_MIN && b.m_val != INT_MIN) {
@@ -1102,17 +1101,15 @@ void mpz_manager<SYNCH>::gcd(mpz const & a, mpz const & b, mpz & c) {
     }
 }
 
-template<bool SYNCH>
-unsigned mpz_manager<SYNCH>::size_info(mpz const & a) {
+
+unsigned mpz_manager::size_info(mpz const & a) {
     if (is_small(a))
         return 1;
     return a.m_ptr->m_size + 1;
 }
 
 
-
-template<bool SYNCH>
-struct mpz_manager<SYNCH>::sz_lt {
+struct mpz_manager::sz_lt {
     mpz const * m_as;
     bool operator()(unsigned p1, unsigned p2) {
         return size_info(m_as[p1]) < size_info(m_as[p2]);
@@ -1120,8 +1117,7 @@ struct mpz_manager<SYNCH>::sz_lt {
 };
 
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::gcd(unsigned sz, mpz const * as, mpz & g) {
+void mpz_manager::gcd(unsigned sz, mpz const * as, mpz & g) {
 #if 0
     // Optimization: sort numbers by size. Motivation: compute the gcd of the small ones first.
     // The optimization did not really help.
@@ -1188,8 +1184,8 @@ void mpz_manager<SYNCH>::gcd(unsigned sz, mpz const * as, mpz & g) {
 #endif
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::gcd(mpz const & r1, mpz const & r2, mpz & a, mpz & b, mpz & r) {
+
+void mpz_manager::gcd(mpz const & r1, mpz const & r2, mpz & a, mpz & b, mpz & r) {
     mpz tmp1, tmp2;
     mpz aux, quot;
     set(tmp1, r1);
@@ -1251,8 +1247,8 @@ void mpz_manager<SYNCH>::gcd(mpz const & r1, mpz const & r2, mpz & a, mpz & b, m
     del(nextb);
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::lcm(mpz const & a, mpz const & b, mpz & c) {
+
+void mpz_manager::lcm(mpz const & a, mpz const & b, mpz & c) {
     if (is_one(b)) {
         set(c, a);
     }
@@ -1278,8 +1274,8 @@ void mpz_manager<SYNCH>::lcm(mpz const & a, mpz const & b, mpz & c) {
     }
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::bitwise_or(mpz const & a, mpz const & b, mpz & c) {
+
+void mpz_manager::bitwise_or(mpz const & a, mpz const & b, mpz & c) {
     assert(is_nonneg(a));
     assert(is_nonneg(b));
     if (is_small(a) && is_small(b)) {
@@ -1315,8 +1311,8 @@ void mpz_manager<SYNCH>::bitwise_or(mpz const & a, mpz const & b, mpz & c) {
     }
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::bitwise_and(mpz const & a, mpz const & b, mpz & c) {
+
+void mpz_manager::bitwise_and(mpz const & a, mpz const & b, mpz & c) {
     if (is_small(a) && is_small(b)) {
         c.m_val = a.m_val & b.m_val;
         c.m_kind = mpz_small;
@@ -1342,8 +1338,8 @@ void mpz_manager<SYNCH>::bitwise_and(mpz const & a, mpz const & b, mpz & c) {
     }
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::bitwise_xor(mpz const & a, mpz const & b, mpz & c) {
+
+void mpz_manager::bitwise_xor(mpz const & a, mpz const & b, mpz & c) {
     assert(is_nonneg(a));
     assert(is_nonneg(b));
     if (is_small(a) && is_small(b)) {
@@ -1378,8 +1374,8 @@ void mpz_manager<SYNCH>::bitwise_xor(mpz const & a, mpz const & b, mpz & c) {
     }
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::bitwise_not(unsigned sz, mpz const & a, mpz & c) {
+
+void mpz_manager::bitwise_not(unsigned sz, mpz const & a, mpz & c) {
     assert(is_nonneg(a));
     if (is_small(a) && sz <= 64) {
         uint64_t v = ~get_uint64(a);
@@ -1413,8 +1409,8 @@ void mpz_manager<SYNCH>::bitwise_not(unsigned sz, mpz const & a, mpz & c) {
     }
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::big_set(mpz & target, mpz const & source) {
+
+void mpz_manager::big_set(mpz & target, mpz const & source) {
     if (&target == &source)
         return;
     target.m_val = source.m_val;
@@ -1442,8 +1438,8 @@ void mpz_manager<SYNCH>::big_set(mpz & target, mpz const & source) {
     }
 }
 
-template<bool SYNCH>
-int mpz_manager<SYNCH>::big_compare(mpz const & a, mpz const & b) {
+
+int mpz_manager::big_compare(mpz const & a, mpz const & b) {
     if (sign(a) > 0) {
         // a is positive
         if (sign(b) > 0) {
@@ -1472,8 +1468,8 @@ int mpz_manager<SYNCH>::big_compare(mpz const & a, mpz const & b) {
     }
 }
 
-template<bool SYNCH>
-bool mpz_manager<SYNCH>::is_uint64(mpz const & a) const {
+
+bool mpz_manager::is_uint64(mpz const & a) const {
     if (a.m_val < 0)
         return false;
     if (is_small(a))
@@ -1486,8 +1482,8 @@ bool mpz_manager<SYNCH>::is_uint64(mpz const & a) const {
     }
 }
 
-template<bool SYNCH>
-bool mpz_manager<SYNCH>::is_int64(mpz const & a) const {
+
+bool mpz_manager::is_int64(mpz const & a) const {
     if (is_small(a))
         return true;
     if (!is_abs_uint64(a))
@@ -1508,16 +1504,16 @@ bool mpz_manager<SYNCH>::is_int64(mpz const & a) const {
     }
 }
 
-template<bool SYNCH>
-uint64_t mpz_manager<SYNCH>::get_uint64(mpz const & a) const {
+
+uint64_t mpz_manager::get_uint64(mpz const & a) const {
     if (is_small(a))
         return static_cast<uint64_t>(a.m_val);
     assert(a.m_ptr->m_size > 0);
     return big_abs_to_uint64(a);
 }
 
-template<bool SYNCH>
-int64_t mpz_manager<SYNCH>::get_int64(mpz const & a) const {
+
+int64_t mpz_manager::get_int64(mpz const & a) const {
     if (is_small(a))
         return static_cast<int64_t>(a.m_val);
     assert(is_int64(a));
@@ -1530,8 +1526,8 @@ int64_t mpz_manager<SYNCH>::get_int64(mpz const & a) const {
     return static_cast<int64_t>(num);
 }
 
-template<bool SYNCH>
-double mpz_manager<SYNCH>::get_double(mpz const & a) const {
+
+double mpz_manager::get_double(mpz const & a) const {
     if (is_small(a))
         return static_cast<double>(a.m_val);
     double r = 0.0;
@@ -1550,8 +1546,8 @@ double mpz_manager<SYNCH>::get_double(mpz const & a) const {
     return a.m_val < 0 ? -r : r;
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::display(std::ostream & out, mpz const & a) const {
+
+void mpz_manager::display(std::ostream & out, mpz const & a) const {
     if (is_small(a)) {
         out << a.m_val;
     }
@@ -1565,11 +1561,11 @@ void mpz_manager<SYNCH>::display(std::ostream & out, mpz const & a) const {
     }
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::display_smt2(std::ostream & out, mpz const & a, bool decimal) const {
+
+void mpz_manager::display_smt2(std::ostream & out, mpz const & a, bool decimal) const {
     if (is_neg(a)) {
-        mpz_manager<SYNCH> * _this = const_cast<mpz_manager<SYNCH>*>(this);
-        _scoped_numeral<mpz_manager<SYNCH> > tmp(*_this);
+        mpz_manager* _this = const_cast<mpz_manager*>(this);
+        _scoped_numeral<mpz_manager> tmp(*_this);
         _this->set(tmp, a);
         _this->neg(tmp);
         out << "(- ";
@@ -1585,8 +1581,8 @@ void mpz_manager<SYNCH>::display_smt2(std::ostream & out, mpz const & a, bool de
     }
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::display_hex(std::ostream & out, mpz const & a, unsigned num_bits) const {
+
+void mpz_manager::display_hex(std::ostream & out, mpz const & a, unsigned num_bits) const {
     assert(num_bits % 4 == 0);
     std::ios fmt(nullptr);
     fmt.copyfmt(out);
@@ -1626,10 +1622,10 @@ static void display_binary_data(std::ostream &out, uint64_t val, uint64_t numBit
             out << "0";
         }
     }
- }
+}
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::display_bin(std::ostream & out, mpz const & a, unsigned num_bits) const {
+
+void mpz_manager::display_bin(std::ostream & out, mpz const & a, unsigned num_bits) const {
     if (is_small(a)) {
         display_binary_data(out, get_uint64(a), num_bits);
     }
@@ -1657,15 +1653,15 @@ void mpz_manager<SYNCH>::display_bin(std::ostream & out, mpz const & a, unsigned
     }
 }
 
-template<bool SYNCH>
-std::string mpz_manager<SYNCH>::to_string(mpz const & a) const {
+
+std::string mpz_manager::to_string(mpz const & a) const {
     std::ostringstream buffer;
     display(buffer, a);
     return std::move(buffer).str();
 }
 
-template<bool SYNCH>
-unsigned mpz_manager<SYNCH>::hash(mpz const& a) {
+
+unsigned mpz_manager::hash(mpz const& a) {
     if (is_small(a)) {
         return static_cast<unsigned>(static_cast<std::uint32_t>(a.m_val));
     }
@@ -1680,8 +1676,8 @@ unsigned mpz_manager<SYNCH>::hash(mpz const& a) {
     return static_cast<unsigned>(std::hash<std::string_view>{}(bytes));
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::power(mpz const & a, unsigned p, mpz & b) {
+
+void mpz_manager::power(mpz const & a, unsigned p, mpz & b) {
     if (is_small(a)) {
         if (a.m_val == 2) {
             if (p < 8 * sizeof(int) - 1) {
@@ -1727,14 +1723,14 @@ void mpz_manager<SYNCH>::power(mpz const & a, unsigned p, mpz & b) {
     del(power);
 }
 
-template<bool SYNCH>
-bool mpz_manager<SYNCH>::is_power_of_two(mpz const & a) {
+
+bool mpz_manager::is_power_of_two(mpz const & a) {
     unsigned shift;
     return is_power_of_two(a, shift);
 }
 
-template<bool SYNCH>
-bool mpz_manager<SYNCH>::is_power_of_two(mpz const & a, unsigned & shift) {
+
+bool mpz_manager::is_power_of_two(mpz const & a, unsigned & shift) {
     if (is_nonpos(a))
         return false;
     if (is_small(a)) {
@@ -1763,9 +1759,9 @@ bool mpz_manager<SYNCH>::is_power_of_two(mpz const & a, unsigned & shift) {
     }
 }
 
+
 // Expand capacity of a
-template<bool SYNCH>
-void mpz_manager<SYNCH>::ensure_capacity(mpz & a, unsigned capacity) {
+void mpz_manager::ensure_capacity(mpz & a, unsigned capacity) {
     if (capacity <= 1)
         return;
     if (capacity < m_init_cell_capacity)
@@ -1808,8 +1804,8 @@ void mpz_manager<SYNCH>::ensure_capacity(mpz & a, unsigned capacity) {
     }
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::normalize(mpz & a) {
+
+void mpz_manager::normalize(mpz & a) {
     mpz_cell * c = a.m_ptr;
     digit_t * ds = c->m_digits;
     unsigned i = c->m_size;
@@ -1835,8 +1831,8 @@ void mpz_manager<SYNCH>::normalize(mpz & a) {
     c->m_size = i;
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::machine_div2k(mpz & a, unsigned k) {
+
+void mpz_manager::machine_div2k(mpz & a, unsigned k) {
     if (k == 0 || is_zero(a))
         return;
     if (is_small(a)) {
@@ -1895,8 +1891,8 @@ void mpz_manager<SYNCH>::machine_div2k(mpz & a, unsigned k) {
     normalize(a);
 }
 
-template<bool SYNCH>
-void mpz_manager<SYNCH>::mul2k(mpz & a, unsigned k) {
+
+void mpz_manager::mul2k(mpz & a, unsigned k) {
     if (k == 0 || is_zero(a))
         return;
     if (is_small(a) && k < 32) {
@@ -1946,10 +1942,11 @@ void mpz_manager<SYNCH>::mul2k(mpz & a, unsigned k) {
     normalize(a);
 }
 
+
 static_assert(sizeof(digit_t) == 4 || sizeof(digit_t) == 8, "");
 
-template<bool SYNCH>
-unsigned mpz_manager<SYNCH>::power_of_two_multiple(mpz const & a) {
+
+unsigned mpz_manager::power_of_two_multiple(mpz const & a) {
     if (is_zero(a))
         return 0;
     if (is_small(a)) {
@@ -2001,8 +1998,8 @@ unsigned mpz_manager<SYNCH>::power_of_two_multiple(mpz const & a) {
     return r;
 }
 
-template<bool SYNCH>
-unsigned mpz_manager<SYNCH>::log2(mpz const & a) {
+
+unsigned mpz_manager::log2(mpz const & a) {
     if (is_nonpos(a))
         return 0;
     if (is_small(a))
@@ -2017,8 +2014,8 @@ unsigned mpz_manager<SYNCH>::log2(mpz const & a) {
         return (sz - 1) * 32 + std::bit_width(static_cast<unsigned>(ds[sz - 1])) - 1;
 }
 
-template<bool SYNCH>
-unsigned mpz_manager<SYNCH>::mlog2(mpz const & a) {
+
+unsigned mpz_manager::mlog2(mpz const & a) {
     if (is_nonneg(a))
         return 0;
     if (is_small(a) && a.m_val == INT_MIN)
@@ -2036,16 +2033,16 @@ unsigned mpz_manager<SYNCH>::mlog2(mpz const & a) {
         return (sz - 1) * 32 + std::bit_width(static_cast<unsigned>(ds[sz - 1])) - 1;
 }
 
-template<bool SYNCH>
-unsigned mpz_manager<SYNCH>::bitsize(mpz const & a) {
+
+unsigned mpz_manager::bitsize(mpz const & a) {
     if (is_nonneg(a))
         return log2(a) + 1;
     else
         return mlog2(a) + 1;
 }
 
-template<bool SYNCH>
-unsigned mpz_manager<SYNCH>::next_power_of_two(mpz const & a) {
+
+unsigned mpz_manager::next_power_of_two(mpz const & a) {
     if (is_nonpos(a))
         return 0;
     if (is_one(a))
@@ -2057,8 +2054,8 @@ unsigned mpz_manager<SYNCH>::next_power_of_two(mpz const & a) {
         return log2(a) + 1;
 }
 
-template<bool SYNCH>
-bool mpz_manager<SYNCH>::is_perfect_square(mpz const & a, mpz & root) {
+
+bool mpz_manager::is_perfect_square(mpz const & a, mpz & root) {
     if (is_neg(a))
         return false;
     set(root, 0);
@@ -2155,8 +2152,8 @@ static unsigned div_u(unsigned k, unsigned n) {
     return k%n == 0 ? k/n : k/n + 1;
 }
 
-template<bool SYNCH>
-bool mpz_manager<SYNCH>::root(mpz & a, unsigned n) {
+
+bool mpz_manager::root(mpz & a, unsigned n) {
     assert(n % 2 != 0 || is_nonneg(a));
     if (is_zero(a)) {
         return true; // precise
@@ -2230,8 +2227,8 @@ bool mpz_manager<SYNCH>::root(mpz & a, unsigned n) {
     return result;
 }
 
-template<bool SYNCH>
-digit_t mpz_manager<SYNCH>::get_least_significant(mpz const& a) {
+
+digit_t mpz_manager::get_least_significant(mpz const& a) {
     assert(!is_neg(a));
     if (is_small(a))
         return std::abs(a.m_val);
@@ -2242,8 +2239,8 @@ digit_t mpz_manager<SYNCH>::get_least_significant(mpz const& a) {
     return cell_a->m_digits[0];
 }
 
-template<bool SYNCH>
-bool mpz_manager<SYNCH>::decompose(mpz const & a, std::vector<digit_t> & digits) {
+
+bool mpz_manager::decompose(mpz const & a, std::vector<digit_t> & digits) {
     digits.clear();
     if (is_small(a)) {
         if (a.m_val < 0) {
@@ -2265,8 +2262,8 @@ bool mpz_manager<SYNCH>::decompose(mpz const & a, std::vector<digit_t> & digits)
     }
 }
 
-template<bool SYNCH>
-bool mpz_manager<SYNCH>::get_bit(mpz const & a, unsigned index) {
+
+bool mpz_manager::get_bit(mpz const & a, unsigned index) {
     if (is_small(a)) {
         assert(a.m_val >= 0);
         if (index >= 8*sizeof(digit_t))
@@ -2283,9 +2280,9 @@ bool mpz_manager<SYNCH>::get_bit(mpz const & a, unsigned index) {
     return 0 != (cell_a->m_digits[i] & (1ull << (digit_t)o));
 }
 
-template<bool SYNCH>
-bool mpz_manager<SYNCH>::divides(mpz const & a, mpz const & b) {
-    _scoped_numeral<mpz_manager<SYNCH> > tmp(*this);
+
+bool mpz_manager::divides(mpz const & a, mpz const & b) {
+    _scoped_numeral<mpz_manager> tmp(*this);
     bool r;
     if (is_zero(a)) {
         // I assume 0 | 0.
@@ -2299,8 +2296,3 @@ bool mpz_manager<SYNCH>::divides(mpz const & a, mpz const & b) {
     }
     return r;
 }
-
-#ifndef SINGLE_THREAD
-template class mpz_manager<true>;
-#endif
-template class mpz_manager<false>;

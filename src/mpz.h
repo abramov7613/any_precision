@@ -9,7 +9,7 @@
 unsigned u_gcd(unsigned u, unsigned v);
 uint64_t u64_gcd(uint64_t u, uint64_t v);
 
-template<bool SYNCH> class mpz_manager;
+class mpz_manager;
 
 typedef unsigned int digit_t;
 typedef int qr_mode;
@@ -17,7 +17,7 @@ typedef int qr_mode;
 struct mpz_cell {
     unsigned  m_size;
     unsigned  m_capacity;
-    digit_t   m_digits[0];
+    digit_t   m_digits[];
 };
 
 /**
@@ -39,8 +39,7 @@ protected:
     unsigned   m_kind:1;
     unsigned   m_owner:1;
     mpz_type * m_ptr;
-    friend class mpz_manager<true>;
-    friend class mpz_manager<false>;
+    friend class mpz_manager;
     friend class mpz_stack;
 
 public:
@@ -79,18 +78,18 @@ class mpz_stack : public mpz {
 public:
     mpz_stack():mpz(reinterpret_cast<mpz_cell*>(m_bytes)) {
         m_ptr->m_capacity = capacity;
+        m_ptr->m_size = 0;
     }
 }; // class mpz_stack
 
 inline void swap(mpz & m1, mpz & m2) noexcept { m1.swap(m2); }
 
-template<bool SYNCH = true>
 class mpz_manager {
-    mutable mpn_manager             m_mpn_manager;
+    mutable mpn_manager m_mpn_manager;
 
     // 64-bit machine?
     static const unsigned m_init_cell_capacity = sizeof(digit_t) == sizeof(uint64_t) ? 4 : 6;
-    mpz                   m_int_min;
+    mpz m_int_min;
 
     static unsigned cell_size(unsigned capacity) {
         return sizeof(mpz_cell) + sizeof(digit_t) * capacity;
@@ -402,7 +401,7 @@ public:
     }
 
     void set(mpz & a, uint64_t val) {
-        if (val < INT_MAX) {
+        if (val <= INT_MAX) {
             a.set(static_cast<int>(val));
         }
         else {
@@ -554,6 +553,3 @@ public:
 
     digit_t get_least_significant(mpz const& a);
 }; // class mpz_manager
-
-typedef mpz_manager<false> synch_mpz_manager;
-typedef mpz_manager<false> unsynch_mpz_manager;

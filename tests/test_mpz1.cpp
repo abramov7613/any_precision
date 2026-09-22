@@ -9,7 +9,6 @@
 #include "mpz.h"
 
 using boost::multiprecision::cpp_int;
-using manager_t = mpz_manager<false>;
 
 namespace {
 
@@ -17,7 +16,7 @@ std::string text(const cpp_int& value) {
     return value.str();
 }
 
-cpp_int as_cpp(const mpz& value, manager_t& manager) {
+cpp_int as_cpp(const mpz& value, mpz_manager& manager) {
     return cpp_int(manager.to_string(value));
 }
 
@@ -32,7 +31,7 @@ cpp_int gcd_cpp(cpp_int a, cpp_int b) {
     return a;
 }
 
-void set_value(manager_t& manager, mpz& result, const cpp_int& value) {
+void set_value(mpz_manager& manager, mpz& result, const cpp_int& value) {
     const std::string value_text = text(value);
     manager.set(result, value_text.c_str());
 }
@@ -50,7 +49,7 @@ cpp_int random_cpp_int(std::mt19937_64& generator, unsigned bits) {
 }
 
 TEST(MpzTest1, BoundaryValuesRoundTrip) {
-    manager_t manager;
+    mpz_manager manager;
     const std::vector<std::string> values = {
         "-2147483649", "-2147483648", "-2147483647",
         "-1", "0", "1",
@@ -67,7 +66,7 @@ TEST(MpzTest1, BoundaryValuesRoundTrip) {
 }
 
 TEST(MpzTest1, BoundaryArithmetic) {
-    manager_t manager;
+    mpz_manager manager;
     const cpp_int int_max = std::numeric_limits<int>::max();
     const cpp_int int_min = std::numeric_limits<int>::min();
     const cpp_int int64_max = std::numeric_limits<std::int64_t>::max();
@@ -87,7 +86,7 @@ TEST(MpzTest1, BoundaryArithmetic) {
 }
 
 TEST(MpzTest1, ArithmeticMatchesReference) {
-    manager_t manager;
+    mpz_manager manager;
     std::mt19937_64 generator(0xA11CE1234ULL);
 
     for (int i = 0; i < 250; ++i) {
@@ -112,7 +111,7 @@ TEST(MpzTest1, ArithmeticMatchesReference) {
 }
 
 TEST(MpzTest1, DivisionRemainderAndModuloMatchReference) {
-    manager_t manager;
+    mpz_manager manager;
     std::mt19937_64 generator(0xD1A1234ULL);
 
     for (int i = 0; i < 250; ++i) {
@@ -139,7 +138,7 @@ TEST(MpzTest1, DivisionRemainderAndModuloMatchReference) {
 }
 
 TEST(MpzTest1, GcdDividesAndExtendedGcd) {
-    manager_t manager;
+    mpz_manager manager;
     const std::vector<std::pair<cpp_int, cpp_int>> cases = {
         {cpp_int(0), cpp_int(0)},
         {cpp_int(0), cpp_int(-42)},
@@ -166,7 +165,7 @@ TEST(MpzTest1, GcdDividesAndExtendedGcd) {
 }
 
 TEST(MpzTest1, PowersShiftsAndModuloPowersOfTwo) {
-    manager_t manager;
+    mpz_manager manager;
     std::mt19937_64 generator(99);
     const std::vector<unsigned> shifts = {0, 1, 31, 32, 33, 63, 64, 65, 127, 128, 129, 256, 1000};
 
@@ -197,7 +196,7 @@ TEST(MpzTest1, PowersShiftsAndModuloPowersOfTwo) {
 }
 
 TEST(MpzTest1, BitOperationsAndBitQueries) {
-    manager_t manager;
+    mpz_manager manager;
     std::mt19937_64 generator(123);
 
     for (int i = 0; i < 100; ++i) {
@@ -223,7 +222,7 @@ TEST(MpzTest1, BitOperationsAndBitQueries) {
 }
 
 TEST(MpzTest1, RootsAndNumberProperties) {
-    manager_t manager;
+    mpz_manager manager;
 
     for (unsigned exponent = 0; exponent < 20; ++exponent) {
         mpz value, root;
@@ -248,7 +247,7 @@ TEST(MpzTest1, RootsAndNumberProperties) {
 }
 
 TEST(MpzTest1, FormattingAndConversions) {
-    manager_t manager;
+    mpz_manager manager;
     mpz value;
     manager.set(value, "255");
 
@@ -274,7 +273,7 @@ TEST(MpzTest1, FormattingAndConversions) {
 }
 
 TEST(MpzTest1, DivisionByZeroThrows) {
-    manager_t manager;
+    mpz_manager manager;
     mpz value(1), zero(0), result;
     EXPECT_ANY_THROW(manager.machine_div(value, zero, result));
 }

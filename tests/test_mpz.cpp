@@ -7,7 +7,6 @@
 #include "mpz.h"
 
 using boost::multiprecision::cpp_int;
-using manager_t = mpz_manager<false>;
 
 constexpr auto I_MIN = std::numeric_limits<int>::min();
 constexpr auto I_MAX = std::numeric_limits<int>::max();
@@ -67,7 +66,7 @@ std::string cpp_to_string(const cpp_int& v)
     return v.convert_to<std::string>();
 }
 
-void tst_div2k(manager_t & m, mpz const & v, unsigned k) {
+void tst_div2k(mpz_manager & m, mpz const & v, unsigned k) {
     mpz x, y, two(2), pw;
     m.machine_div2k(v, k, x);
     m.power(two, k, pw);
@@ -77,19 +76,19 @@ void tst_div2k(manager_t & m, mpz const & v, unsigned k) {
     EXPECT_TRUE(is_eq);
 }
 
-void tst_div2k(manager_t & m, int v, unsigned k) {
+void tst_div2k(mpz_manager & m, int v, unsigned k) {
     mpz x;
     m.set(x, v);
     tst_div2k(m, x, k);
 }
 
-void tst_div2k(manager_t & m, char const * v, unsigned k) {
+void tst_div2k(mpz_manager & m, char const * v, unsigned k) {
     mpz x;
     m.set(x, v);
     tst_div2k(m, x, k);
 }
 
-void tst_mul2k(manager_t & m, mpz const & v, unsigned k) {
+void tst_mul2k(mpz_manager & m, mpz const & v, unsigned k) {
     mpz x, y, two(2), pw;
     m.mul2k(v, k, x);
     m.power(two, k, pw);
@@ -99,13 +98,13 @@ void tst_mul2k(manager_t & m, mpz const & v, unsigned k) {
     EXPECT_TRUE(is_eq);
 }
 
-void tst_mul2k(manager_t & m, int v, unsigned k) {
+void tst_mul2k(mpz_manager & m, int v, unsigned k) {
     mpz x;
     m.set(x, v);
     tst_mul2k(m, x, k);
 }
 
-void tst_mul2k(manager_t & m, char const * v, unsigned k) {
+void tst_mul2k(mpz_manager & m, char const * v, unsigned k) {
     mpz x;
     m.set(x, v);
     tst_mul2k(m, x, k);
@@ -115,7 +114,7 @@ void tst_mul2k(manager_t & m, char const * v, unsigned k) {
 
 TEST(MpzTest, OriginalTst1)
 {
-    manager_t m;
+    mpz_manager m;
     char const * str = "1002034040050606089383838288182";
     mpz v;
     m.set(v, str);
@@ -136,7 +135,7 @@ TEST(MpzTest, OriginalTst1)
 
 TEST(MpzTest, OriginalBug1)
 {
-    manager_t m;
+    mpz_manager m;
     mpz v1;
     m.set(v1, "1002043949858757875676767675747473");
     mpz v2;
@@ -146,7 +145,7 @@ TEST(MpzTest, OriginalBug1)
 
 TEST(MpzTest, OriginalBug3)
 {
-    manager_t m;
+    mpz_manager m;
     mpz v1, v2;
     m.set(v1, I_MIN);
     m.set(v2, I_MAX);
@@ -157,7 +156,7 @@ TEST(MpzTest, OriginalBug3)
 
 TEST(MpzTest, OriginalBug4)
 {
-    manager_t m;
+    mpz_manager m;
     mpz x, y;
     m.set(y, static_cast<uint64_t>(4294967295ull));
     m.set(x, static_cast<uint64_t>(4026531839ull));
@@ -173,7 +172,7 @@ TEST(MpzTest, OriginalBug4)
 
 TEST(MpzTest, OriginalTst2k)
 {
-    manager_t m;
+    mpz_manager m;
     tst_mul2k(m, 120, 32);
     tst_mul2k(m, "102938484858483282832717616263643648481827437292943727163646457588332211", 22);
     tst_div2k(m, "102938484858483282832717616263643648481827437292943727163646457588332211", 22);
@@ -252,7 +251,7 @@ TEST(MpzTest, OriginalTst2k)
 
 TEST(MpzTest, OriginalTstintminbug)
 {
-    manager_t m;
+    mpz_manager m;
     mpz intmin(INT_MIN);
     mpz big;
     mpz expected;
@@ -266,7 +265,7 @@ TEST(MpzTest, OriginalTstintminbug)
 
 TEST(MpzTest, OriginalTstint64minbug)
 {
-    manager_t m;
+    mpz_manager m;
     mpz intmin;
     mpz test;
     m.set(test, "-9223372036854775808");
@@ -277,7 +276,7 @@ TEST(MpzTest, OriginalTstint64minbug)
 
 TEST(MpzTest, BoundaryInt64)
 {
-    manager_t m;
+    mpz_manager m;
 
     mpz a;
     m.set(a, I64_MAX);
@@ -287,13 +286,13 @@ TEST(MpzTest, BoundaryInt64)
 
 TEST(MpzTest, NegativeArithmetic)
 {
-    manager_t m;
+    mpz_manager m;
 
     mpz a(-100);
     mpz b(7);
     mpz r;
     m.machine_div_rem(a, b, r, r);
-    EXPECT_TRUE(manager_t::is_neg(r));
+    EXPECT_TRUE(mpz_manager::is_neg(r));
 
     mpz v1, v2;
     m.set(v1, I_MIN);
@@ -305,7 +304,7 @@ TEST(MpzTest, NegativeArithmetic)
 
 TEST(MpzTest, AddAcrossSmallBoundary)
 {
-    manager_t m;
+    mpz_manager m;
 
     mpz a(I_MAX);
     mpz b(1);
@@ -319,7 +318,7 @@ TEST(MpzTest, AddAcrossSmallBoundary)
 
 TEST(MpzTest, Multiplication)
 {
-    manager_t m;
+    mpz_manager m;
 
     mpz a(1000000);
     mpz b(1000000);
@@ -332,7 +331,7 @@ TEST(MpzTest, Multiplication)
 
 TEST(MpzTest, DivisionSigns)
 {
-    manager_t m;
+    mpz_manager m;
 
     mpz a(-100);
     mpz b(-7);
@@ -345,7 +344,7 @@ TEST(MpzTest, DivisionSigns)
 
 TEST(MpzTest, BitOperationsNegativeNumbers)
 {
-    manager_t m;
+    mpz_manager m;
 
     mpz a(-1);
     mpz b(0xFF);
@@ -358,7 +357,7 @@ TEST(MpzTest, BitOperationsNegativeNumbers)
 
 TEST(MpzTest, SmallArithmeticAgainstInt64)
 {
-    manager_t m;
+    mpz_manager m;
 
     for (int64_t a = -100; a <= 100; ++a)
     {
@@ -375,7 +374,7 @@ TEST(MpzTest, SmallArithmeticAgainstInt64)
 
 TEST(MpzTest, GcdProperties)
 {
-    manager_t m;
+    mpz_manager m;
 
     mpz a(48);
     mpz b(18);
@@ -388,7 +387,7 @@ TEST(MpzTest, GcdProperties)
 
 TEST(MpzTest, AdditionSmallRandom)
 {
-    manager_t m;
+    mpz_manager m;
 
     for (int i = 0; i < 100; ++i)
     {
@@ -404,7 +403,7 @@ TEST(MpzTest, AdditionSmallRandom)
 
 TEST(MpzTest, AdditionBigRandom)
 {
-    manager_t m;
+    mpz_manager m;
 
     for (int i = 0; i < 100; ++i)
     {
@@ -425,7 +424,7 @@ TEST(MpzTest, AdditionBigRandom)
 
 TEST(MpzTest, SubtractionBigRandom)
 {
-    manager_t m;
+    mpz_manager m;
 
     for (int i = 0; i < 100; ++i)
     {
@@ -446,7 +445,7 @@ TEST(MpzTest, SubtractionBigRandom)
 
 TEST(MpzTest, MultiplicationBigRandom)
 {
-    manager_t m;
+    mpz_manager m;
 
     for (int i = 0; i < 100; ++i)
     {
@@ -467,7 +466,7 @@ TEST(MpzTest, MultiplicationBigRandom)
 
 TEST(MpzTest, Division64)
 {
-    manager_t m;
+    mpz_manager m;
     std::mt19937_64 rng(999);
 
     for (int i = 0; i < 500; ++i)
@@ -486,7 +485,7 @@ TEST(MpzTest, Division64)
 
 TEST(MpzTest, DivisionBigRandom)
 {
-    manager_t m;
+    mpz_manager m;
 
     for (int i = 0; i < 100; ++i)
     {
@@ -507,7 +506,7 @@ TEST(MpzTest, DivisionBigRandom)
 
 TEST(MpzTest, GcdRandom)
 {
-    manager_t m;
+    mpz_manager m;
     std::mt19937_64 rng(3);
 
     for (int i = 0; i < 200; ++i)
@@ -525,7 +524,7 @@ TEST(MpzTest, GcdRandom)
 
 TEST(MpzTest, ShiftRegression)
 {
-    manager_t m;
+    mpz_manager m;
 
     for (int i = 0; i < 64; ++i)
     {
@@ -539,7 +538,7 @@ TEST(MpzTest, ShiftRegression)
 
 TEST(MpzTest, StringRoundTrip)
 {
-    manager_t m;
+    mpz_manager m;
 
     for (long long i = -100000; i <= 100000; i += 997)
     {
