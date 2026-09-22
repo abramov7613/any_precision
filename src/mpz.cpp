@@ -1,21 +1,3 @@
-/*++
-Copyright (c) 2006 Microsoft Corporation
-
-Module Name:
-
-    mpz.cpp
-
-Abstract:
-
-    <abstract>
-
-Author:
-
-    Leonardo de Moura (leonardo) 2010-06-17.
-
-Revision History:
-
---*/
 #include <cstring>
 #include <sstream>
 #include <iomanip>
@@ -31,11 +13,7 @@ constexpr auto QUOT_ONLY = 0;
 constexpr auto REM_ONLY = 1;
 constexpr auto QUOT_AND_REM = 2;
 
-// Available GCD algorithms:
-// #define EUCLID_GCD
-// #define BINARY_GCD
-// #define LS_BINARY_GCD
-#define LEHMER_GCD
+#define LEHMER_GCD // Available GCD algorithms: EUCLID_GCD || BINARY_GCD || LS_BINARY_GCD
 
 #ifdef __has_builtin
     #define HAS_BUILTIN(X) __has_builtin(X)
@@ -71,14 +49,6 @@ static uint64_t _trailing_zeros64(uint64_t x) {
 #endif
 
 #undef HAS_BUILTIN
-
-unsigned trailing_zeros(uint32_t x) {
-    return static_cast<unsigned>(_trailing_zeros32(x));
-}
-
-unsigned trailing_zeros(uint64_t x) {
-    return static_cast<unsigned>(_trailing_zeros64(x));
-}
 
 #define _bit_min(x, y) (y + ((x - y) & ((int)(x - y) >> 31)))
 #define _bit_max(x, y) (x - ((x - y) & ((int)(x - y) >> 31)))

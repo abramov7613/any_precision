@@ -1,21 +1,3 @@
-/*++
-Copyright (c) 2006 Microsoft Corporation
-
-Module Name:
-
-    mpz.h
-
-Abstract:
-
-    <abstract>
-
-Author:
-
-    Leonardo de Moura (leonardo) 2010-06-17.
-
-Revision History:
-
---*/
 #pragma once
 
 #include <climits>
@@ -26,8 +8,6 @@ Revision History:
 
 unsigned u_gcd(unsigned u, unsigned v);
 uint64_t u64_gcd(uint64_t u, uint64_t v);
-unsigned trailing_zeros(uint64_t);
-unsigned trailing_zeros(uint32_t);
 
 template<bool SYNCH> class mpz_manager;
 

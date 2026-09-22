@@ -1,21 +1,3 @@
-/*++
-Copyright (c) 2011 Microsoft Corporation
-
-Module Name:
-
-    mpn.h
-
-Abstract:
-
-    Multi Precision Natural Numbers
-
-Author:
-
-    Christoph Wintersteiger (cwinter) 2011-11-16.
-
-Revision History:
-
---*/
 #pragma once
 
 #include <ostream>

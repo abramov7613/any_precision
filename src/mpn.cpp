@@ -1,21 +1,3 @@
-/*++
-Copyright (c) 2011 Microsoft Corporation
-
-Module Name:
-
-    mpn.cpp
-
-Abstract:
-
-    Multi Precision Natural Numbers
-
-Author:
-
-    Christoph Wintersteiger (cwinter) 2011-11-16.
-
-Revision History:
-
---*/
 #include <cassert>
 #include <cstdint>
 #include "mpn.h"
@@ -129,28 +111,29 @@ bool mpn_manager::div(mpn_digit const * numer, unsigned lnum,
                       mpn_digit const * denom, unsigned lden,
                       mpn_digit * quot,
                       mpn_digit * rem) {
+    // Проверка деления на ноль
+    assert(lden > 0 && "Division by zero");
+    assert(lnum > 0 && "Empty numerator");
+    assert(denom != nullptr && numer != nullptr);
+    assert(quot != nullptr && rem != nullptr);
+    assert(denom[lden - 1] != 0 && "Leading digit of denominator must be non-zero");
+
     bool res = false;
-
-    if (lnum < lden) {
-        for (unsigned i = 0; i < (lnum-lden+1); ++i)
-            quot[i] = 0;
-        for (unsigned i = 0; i < lden; ++i)
-            rem[i] = (i < lnum) ? numer[i] : 0;
-        return false;
-    }
-
-    assert(denom[lden-1] != 0);
-
     if (lnum == 1 && lden == 1) {
+        // Однозначное деление — быстрый путь
         *quot = numer[0] / denom[0];
         *rem  = numer[0] % denom[0];
     }
-    else if (lnum < lden || (lnum == lden && numer[lnum-1] < denom[lden-1])) {
+    else if (lnum < lden ||
+             (lnum == lden && numer[lnum - 1] < denom[lden - 1])) {
+        // Числитель меньше знаменателя: частное = 0, остаток = числитель.
+        // (включает случай lnum < lden — БЕЗ unsigned underflow)
         *quot = 0;
         for (unsigned i = 0; i < lden; ++i)
             rem[i] = (i < lnum) ? numer[i] : 0;
     }
-    else  {
+    else {
+        // Нормальный путь — алгоритм Кнута D
         mpn_sbuffer u, v, t_ms, t_ab;
         unsigned d = div_normalize(numer, lnum, denom, lden, u, v);
         if (lden == 1)
@@ -159,7 +142,6 @@ bool mpn_manager::div(mpn_digit const * numer, unsigned lnum,
             res = div_n(u, v, quot, rem, t_ms, t_ab);
         div_unnormalize(u, v, d, rem);
     }
-
     return res;
 }
 
