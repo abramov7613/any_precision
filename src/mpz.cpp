@@ -1552,12 +1552,8 @@ void mpz_manager::display(std::ostream & out, mpz const & a) const {
         out << a.m_val;
     }
     else {
-        if (a.m_val < 0)
-            out << '-';
-
-        auto sz = sizeof(digit_t) == 4 ? 11 : 21;
-        std::vector<char> buffer(sz * size(a), 0);
-        out << m_mpn_manager.to_string(digits(a), size(a), buffer.data(), buffer.size());
+        if (a.m_val < 0) out << '-';
+        out << m_mpn_manager.to_string(digits(a), size(a));
     }
 }
 

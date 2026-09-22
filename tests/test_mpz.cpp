@@ -551,6 +551,16 @@ TEST(MpzTest, StringRoundTrip)
 
         EXPECT_TRUE(m.eq(a, b));
     }
+
+    for (auto i = 0u; i < 100; ++i)
+    {
+      auto str = rand_by_digits( rand_by_minmax(16, 34) );
+      mpz a;
+      m.set(a, str.c_str());
+      auto out = m.to_string(a);
+
+      EXPECT_EQ(str, out) << "str = " << str << "; out = " << out;
+    }
 }
 
 

@@ -2,6 +2,7 @@
 
 #include <ostream>
 #include <vector>
+#include <string>
 
 typedef unsigned int mpn_digit;
 
@@ -11,26 +12,29 @@ public:
     int compare(mpn_digit const * a, unsigned lnga,
                 mpn_digit const * b, unsigned lngb) const;
 
-    bool add(mpn_digit const * a, unsigned lnga,
+    void add(mpn_digit const * a, unsigned lnga,
              mpn_digit const * b, unsigned lngb,
              mpn_digit *c, unsigned lngc_alloc,
              unsigned * plngc) const;
 
-    bool sub(mpn_digit const * a, unsigned lnga,
+    void sub(mpn_digit const * a, unsigned lnga,
              mpn_digit const * b, unsigned lngb,
              mpn_digit * c, mpn_digit * pborrow) const;
 
-    bool mul(mpn_digit const * a, unsigned lnga,
+    void mul(mpn_digit const * a, unsigned lnga,
              mpn_digit const * b, unsigned lngb,
              mpn_digit * c) const;
 
-    bool div(mpn_digit const * numer, unsigned lnum,
+    void div(mpn_digit const * numer, unsigned lnum,
              mpn_digit const * denom, unsigned lden,
              mpn_digit * quot,
              mpn_digit * rem);
 
     char * to_string(mpn_digit const * a, unsigned lng,
                      char * buf, unsigned lbuf) const;
+
+    std::string to_string(mpn_digit const * a, unsigned lng) const;
+
 private:
     using mpn_sbuffer = std::vector<mpn_digit>;
 
@@ -42,10 +46,10 @@ private:
     void div_unnormalize(mpn_sbuffer & numer, mpn_sbuffer & denom,
                          unsigned d, mpn_digit * rem) const;
 
-    bool div_1(mpn_sbuffer & numer, mpn_digit denom,
+    void div_1(mpn_sbuffer & numer, mpn_digit denom,
                mpn_digit * quot) const;
 
-    bool div_n(mpn_sbuffer & numer, mpn_sbuffer const & denom,
+    void div_n(mpn_sbuffer & numer, mpn_sbuffer const & denom,
                mpn_digit * quot, mpn_digit * rem,
                mpn_sbuffer & ms, mpn_sbuffer & ab) const;
 };
