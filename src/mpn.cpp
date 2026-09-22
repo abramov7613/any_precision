@@ -116,7 +116,6 @@ void mpn_manager::div(mpn_digit const * numer, unsigned lnum,
                       mpn_digit const * denom, unsigned lden,
                       mpn_digit * quot,
                       mpn_digit * rem) {
-    // Проверка деления на ноль
     assert(lden > 0 && "Division by zero");
     assert(lnum > 0 && "Empty numerator");
     assert(denom != nullptr && numer != nullptr);
