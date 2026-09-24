@@ -85,7 +85,7 @@ public:
 inline void swap(mpz & m1, mpz & m2) noexcept { m1.swap(m2); }
 
 class mpz_manager {
-    mutable mpn_manager m_mpn_manager;
+    mpn_manager<digit_t> m_mpn_manager;
 
     // 64-bit machine?
     static const unsigned m_init_cell_capacity = sizeof(digit_t) == sizeof(uint64_t) ? 4 : 6;

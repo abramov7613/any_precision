@@ -1,412 +1,692 @@
-/**
- * @file mpn.h
- * @brief Multi-precision non-negative integer arithmetic library.
- *
- * This header declares the @c mpn_manager class, which provides
- * arbitrary-precision (bignum) arithmetic operations on non-negative
- * integers stored as arrays of @c mpn_digit values.
- *
- * All operations follow algorithms described in Donald E. Knuth,
- * "The Art of Computer Programming", Vol. 2, Section 4.3.1–4.3.3.
- *
- * @par Digit representation
- *   Numbers are stored as arrays of @c mpn_digit (unsigned int, 32-bit)
- *   in **little-endian order**: index 0 holds the least significant
- *   digit, index @c lng-1 holds the most significant digit.
- *   A number of length @c lng occupies @c lng consecutive elements
- *   of an @c mpn_digit array.  The most significant digit
- *   (at index @c lng-1) is assumed to be non-zero unless the number
- *   itself is zero.
- *
- * @par Conventions
- *   - Lengths are expressed in number of @c mpn_digit elements.
- *   - Caller is responsible for allocating sufficiently large output
- *     buffers.
- *   - Methods do not allocate memory for the primary operands;
- *     internal scratch space is managed via @c std::vector.
- */
-
 #pragma once
-#include <vector>
+
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <span>
+#include <stdexcept>
 #include <string>
+#include <type_traits>
+#include <vector>
+
+#include <boost/multiprecision/cpp_int.hpp>
+
+namespace mpn_detail {
+
+template<class T>
+concept MpnDigit =
+    std::is_integral_v<T> &&
+    std::is_unsigned_v<T> &&
+    !std::is_same_v<T, bool>;
+
+// The arithmetic algorithms need a type that can hold two digits plus carry.
+// Standard C++20 has no uint128_t, so uint64_t uses Boost's uint128_t.
+template<class T>
+struct wide_type;
+
+template<MpnDigit T>
+requires (std::numeric_limits<T>::digits <= 8)
+struct wide_type<T> { using type = std::uint16_t; };
+
+template<MpnDigit T>
+requires (std::numeric_limits<T>::digits > 8 && std::numeric_limits<T>::digits <= 16)
+struct wide_type<T> { using type = std::uint32_t; };
+
+template<MpnDigit T>
+requires (std::numeric_limits<T>::digits > 16 && std::numeric_limits<T>::digits <= 32)
+struct wide_type<T> { using type = std::uint64_t; };
+
+template<MpnDigit T>
+requires (std::numeric_limits<T>::digits > 32 && std::numeric_limits<T>::digits <= 64)
+struct wide_type<T> { using type = boost::multiprecision::uint128_t; };
+
+template<MpnDigit T>
+using wide_type_t = typename wide_type<T>::type;
+
+template<MpnDigit T>
+constexpr std::size_t digit_bits_v = std::numeric_limits<T>::digits;
+
+template<MpnDigit T>
+constexpr wide_type_t<T> base_v = wide_type_t<T>(1) << digit_bits_v<T>;
+
+template<MpnDigit T>
+constexpr T top_bit_v = T(1) << (digit_bits_v<T> - 1);
+
+template<MpnDigit T>
+constexpr T first_bits(std::size_t n, T x) noexcept {
+    return n == 0 ? T(0) : (n >= digit_bits_v<T> ? x : T(x >> (digit_bits_v<T> - n)));
+}
+
+template<MpnDigit T>
+constexpr T last_bits(std::size_t n, T x) noexcept {
+    if (n == 0) return T(0);
+    if (n >= digit_bits_v<T>) return x;
+    return T((x << (digit_bits_v<T> - n)) >> (digit_bits_v<T> - n));
+}
+
+// Largest power of 10 that fits in Digit, and its decimal width.
+template<MpnDigit T>
+struct decimal_traits {
+    static constexpr T base = [] {
+        T value = 1;
+        while (value <= (std::numeric_limits<T>::max() / T(10)))
+            value = T(value * T(10));
+        return value;
+    }();
+
+    static constexpr std::size_t digits = [] {
+        std::size_t n = 0;
+        T value = base;
+        while (value > T(1)) {
+            value = T(value / T(10));
+            ++n;
+        }
+        return n;
+    }();
+};
+
+} // namespace mpn_detail
 
 /**
- * @brief A single digit of a multi-precision number.
- *
- * Each digit holds @c sizeof(unsigned int) * 8 = 32 bits of the number.
- * The full multi-precision integer is represented as an array of
- * these digits in little-endian order (least significant digit first).
+ * @brief Multi-precision unsigned integer arithmetic over configurable digits.
+ * @tparam Digit Unsigned integral digit type. Supported widths are 8, 16, 32 and 64 bits.
+ * @note The 64-bit specialization uses Boost.Multiprecision::uint128_t for intermediate arithmetic.
  */
-typedef unsigned int mpn_digit;
-
-/**
- * @class mpn_manager
- * @brief Manager class for multi-precision non-negative integer operations.
- *
- * The @c mpn_manager class implements comparison, addition, subtraction,
- * multiplication, division, and decimal string conversion for
- * arbitrary-precision non-negative integers represented as arrays of
- * @c mpn_digit.
- *
- * @par Usage example
- * @code
- *   mpn_manager mpn;
- *
- *   // Multiply 0xFFFFFFFF by 0xFFFFFFFF
- *   mpn_digit a[] = {0xFFFFFFFF};
- *   mpn_digit b[] = {0xFFFFFFFF};
- *   mpn_digit c[2];
- *   mpn.mul(a, 1, b, 1, c);
- *
- *   // c now holds the 64-bit result in two 32-bit digits
- *   std::string s = mpn.to_string(c, 2);
- *   // s == "18446744065119617025"
- * @endcode
- *
- * @par Algorithms
- *   - Addition:   Knuth's Algorithm A (TAOCP Vol. 2, 4.3.1)
- *   - Subtraction: Knuth's Algorithm S (TAOCP Vol. 2, 4.3.1)
- *   - Multiplication: Knuth's Algorithm M (TAOCP Vol. 2, 4.3.1)
- *   - Division:   Knuth's Algorithm D (TAOCP Vol. 2, 4.3.1)
- *
- * @note All public methods are @c const except @c div(), which may
- *       use internal mutable state in future versions.
- * @note None of the methods are thread-safe when operating on
- *       shared mutable buffers.
- */
+template<mpn_detail::MpnDigit Digit = std::uint32_t>
 class mpn_manager {
-
 public:
+    using digit_type = Digit;
+    using wide_type = mpn_detail::wide_type_t<Digit>;
+    using buffer_type = std::vector<Digit>;
+
+    /// Number of value bits stored in one digit.
+    static constexpr std::size_t digit_bits = mpn_detail::digit_bits_v<Digit>;
+
+    /// Numeric base represented by one digit position: 2^digit_bits.
+    static constexpr wide_type base = mpn_detail::base_v<Digit>;
+
     /**
-     * @brief Compare two multi-precision non-negative integers.
+     * @brief Compares two non-negative multi-precision integers.
      *
-     * Performs an element-wise comparison from the most significant
-     * digit to the least significant digit, treating missing digits
-     * (beyond the declared length) as zero.
+     * Each operand is represented as a little-endian array: element zero is
+     * the least-significant digit. Leading zero digits are allowed and do not
+     * affect the result.
      *
-     * @param a    Pointer to the first operand (little-endian digits).
+     * @param a Pointer to the first operand, or `nullptr` when @p lnga is zero.
+     * @param lnga Number of digits in the first operand.
+     * @param b Pointer to the second operand, or `nullptr` when @p lngb is zero.
+     * @param lngb Number of digits in the second operand.
+     * @return `-1` if `a < b`, `0` if `a == b`, or `1` if `a > b`.
+     * @throws std::invalid_argument If a non-empty operand has a null pointer.
+     * @note The function does not modify either operand.
+     */
+    [[nodiscard]] int compare(Digit const* a, std::size_t lnga,
+                              Digit const* b, std::size_t lngb) const;
+
+    /**
+     * @brief Adds two non-negative multi-precision integers.
+     *
+     * The result is written to @p c in little-endian form. The result length
+     * excludes insignificant leading zero digits, except that zero itself is
+     * represented by one digit. The output buffer must provide room for one
+     * possible carry digit in addition to `max(lnga, lngb)` digits.
+     *
+     * @param a First operand.
      * @param lnga Number of digits in @p a.
-     * @param b    Pointer to the second operand (little-endian digits).
+     * @param b Second operand.
      * @param lngb Number of digits in @p b.
-     * @return  1  if @p a > @p b,
-     * @return -1  if @p a < @p b,
-     * @return  0  if @p a == @p b.
-     *
-     * @pre @p a points to at least @p lnga valid @c mpn_digit elements.
-     * @pre @p b points to at least @p lngb valid @c mpn_digit elements.
+     * @param c Output buffer. It must not overlap either input buffer.
+     * @param lngc_alloc Number of allocated digits in @p c.
+     * @param plngc Receives the number of significant digits written to @p c.
+     * @throws std::invalid_argument If an output length pointer is null, an
+     *         operand pointer is null while its length is non-zero, or both
+     *         operands are empty.
+     * @throws std::out_of_range If @p c is too small.
+     * @throws std::length_error If the required result size cannot be represented
+     *         by `std::size_t`.
      */
-    int compare(mpn_digit const * a, unsigned lnga,
-                mpn_digit const * b, unsigned lngb) const;
+    void add(Digit const* a, std::size_t lnga,
+             Digit const* b, std::size_t lngb,
+             Digit* c, std::size_t lngc_alloc,
+             std::size_t* plngc) const;
 
     /**
-     * @brief Add two multi-precision non-negative integers.
+     * @brief Subtracts one non-negative multi-precision integer from another.
      *
-     * Computes @p c = @p a + @p b using Knuth's Algorithm A.
-     * The result buffer must be at least @c max(lnga, lngb) + 1 digits
-     * long to accommodate a possible carry into the most significant
-     * position.  Leading zero digits are stripped from the result
-     * (the output length is adjusted so that the most significant
-     * digit is non-zero, except when the result is zero itself,
-     * in which case the length is 1).
+     * The operation computes `a - b` modulo `base^N`, where
+     * `N = max(lnga, lngb)`. If `a < b`, @p pborrow receives one; otherwise it
+     * receives zero. The output is always exactly `N` digits.
      *
-     * @param a         Pointer to the first addend (little-endian digits).
-     * @param lnga       Number of digits in @p a.
-     * @param b         Pointer to the second addend (little-endian digits).
-     * @param lngb       Number of digits in @p b.
-     * @param c         Output buffer for the sum.  Must have room for
-     *                  at least @c max(lnga, lngb) + 1 digits.
-     * @param lngc_alloc Allocated size of @p c (in digits).  Must equal
-     *                   @c max(lnga, lngb) + 1.
-     * @param plngc     On return, points to the actual number of digits
-     *                  written into @p c (after stripping leading zeros).
-     *
-     * @pre @p lngc_alloc == @c max(lnga, lngb) + 1 and @c max(lnga, lngb) > 0.
-     * @pre @p plngc is not @c nullptr.
-     *
-     * @par Algorithm
-     *   Knuth's Algorithm A (TAOCP Vol. 2, 4.3.1, p. 265).
-     *   Each digit pair is summed with carry propagation;
-     *   the final carry digit is stored at position @c len.
+     * @param a Minuend.
+     * @param lnga Number of digits in @p a.
+     * @param b Subtrahend.
+     * @param lngb Number of digits in @p b.
+     * @param c Output buffer with at least `max(lnga, lngb)` digits. It must not
+     *        overlap either input buffer.
+     * @param pborrow Receives the final borrow (`0` or `1`).
+     * @throws std::invalid_argument If an output pointer is null, an operand
+     *         pointer is null while its length is non-zero, or both operands are empty.
      */
-    void add(mpn_digit const * a, unsigned lnga,
-             mpn_digit const * b, unsigned lngb,
-             mpn_digit *c, unsigned lngc_alloc,
-             unsigned * plngc) const;
+    void sub(Digit const* a, std::size_t lnga,
+             Digit const* b, std::size_t lngb,
+             Digit* c, Digit* pborrow) const;
 
     /**
-     * @brief Subtract two multi-precision non-negative integers.
+     * @brief Multiplies two non-negative multi-precision integers.
      *
-     * Computes @p c = @p a - @p b using Knuth's Algorithm S.
-     * If @p a < @p b, the result wraps (unsigned subtraction) and a
-     * borrow flag of 1 is returned through @p pborrow; otherwise the
-     * borrow is 0.
+     * The product is written in little-endian form to @p c. The caller must
+     * provide at least `lnga + lngb` digits of storage. The output buffer must
+     * not overlap either input buffer.
      *
-     * @param a      Pointer to the minuend (little-endian digits).
-     * @param lnga    Number of digits in @p a.
-     * @param b      Pointer to the subtrahend (little-endian digits).
-     * @param lngb    Number of digits in @p b.
-     * @param c      Output buffer for the difference.  Must have room
-     *               for at least @c max(lnga, lngb) digits.
-     * @param pborrow On return, contains the final borrow value:
-     *               0 if @p a >= @p b (no underflow),
-     *               1 if @p a < @p b (underflow occurred).
-     *
-     * @pre @p c points to at least @c max(lnga, lngb) valid @c mpn_digit elements.
-     * @pre @p pborrow is not @c nullptr.
-     *
-     * @par Algorithm
-     *   Knuth's Algorithm S (TAOCP Vol. 2, 4.3.1, p. 272).
-     *   Each digit pair is subtracted with borrow propagation
-     *   analogous to carry in addition.
+     * @param a First factor.
+     * @param lnga Number of digits in @p a.
+     * @param b Second factor.
+     * @param lngb Number of digits in @p b.
+     * @param c Output buffer with at least `lnga + lngb` digits.
+     * @throws std::invalid_argument If an operand is empty or an input/output
+     *         pointer is null.
+     * @throws std::length_error If `lnga + lngb` overflows `std::size_t`.
      */
-    void sub(mpn_digit const * a, unsigned lnga,
-             mpn_digit const * b, unsigned lngb,
-             mpn_digit * c, mpn_digit * pborrow) const;
+    void mul(Digit const* a, std::size_t lnga,
+             Digit const* b, std::size_t lngb,
+             Digit* c) const;
 
     /**
-     * @brief Multiply two multi-precision non-negative integers.
+     * @brief Divides a non-negative multi-precision integer by another.
      *
-     * Computes @p c = @p a * @p b using Knuth's Algorithm M
-     * (schoolbook multiplication).  The result buffer must be at
-     * least @c lnga + lngb digits long.
+     * Computes `numer = quot * denom + rem`. Both operands are represented in
+     * little-endian order. The denominator must be non-zero and must not have
+     * leading zero digits. The quotient and remainder buffers must be large
+     * enough for the result and must not overlap the input buffers.
      *
-     * @param a    Pointer to the first factor (little-endian digits).
-     * @param lnga  Number of digits in @p a.
-     * @param b    Pointer to the second factor (little-endian digits).
-     * @param lngb  Number of digits in @p b.
-     * @param c    Output buffer for the product.  Must have room for
-     *             at least @c lnga + lngb digits.
-     *
-     * @pre @p c points to at least @c lnga + lngb valid @c mpn_digit elements.
-     * @pre @p a and @p b are not @c nullptr (unless their length is 0).
-     *
-     * @par Algorithm
-     *   Knuth's Algorithm M (TAOCP Vol. 2, 4.3.1, p. 268).
-     *   This is the O(n*m) schoolbook algorithm.  Each digit of @p b
-     *   is multiplied by every digit of @p a with carry, accumulating
-     *   the partial products in @p c.  The branch for zero digits
-     *   of @p b is an optional optimisation.
-     *
-     * @note A more efficient algorithm (e.g., Karatsuba) could be
-     *       implemented for large operands; see Knuth 4.3.3.
+     * @param numer Numerator.
+     * @param lnum Number of numerator digits.
+     * @param denom Non-zero denominator.
+     * @param lden Number of denominator digits.
+     * @param quot Output quotient buffer. The caller must provide enough storage
+     *        for the quotient; at most `max(1, lnum - lden + 1)` digits are used.
+     * @param rem Output remainder buffer with at least `lden` digits.
+     * @throws std::invalid_argument If an operand is empty, an input/output
+     *         pointer is null, or the denominator has a leading zero digit.
+     * @note This low-level overload does not receive output capacities, so the
+     *       caller is responsible for providing sufficiently large output buffers.
      */
-    void mul(mpn_digit const * a, unsigned lnga,
-             mpn_digit const * b, unsigned lngb,
-             mpn_digit * c) const;
+    void div(Digit const* numer, std::size_t lnum,
+             Digit const* denom, std::size_t lden,
+             Digit* quot, Digit* rem) const;
 
     /**
-     * @brief Divide two multi-precision non-negative integers, producing
-     *        quotient and remainder.
+     * @brief Converts a multi-precision integer to its decimal representation.
      *
-     * Computes @p quot = @p numer / @p denom and @p rem = @p numer % @p denom
-     * using Knuth's Algorithm D for multi-digit divisors and a simplified
-     * routine for single-digit divisors.
+     * Digits are interpreted as a little-endian unsigned integer. An empty
+     * input represents zero, as does an input consisting entirely of zero digits.
      *
-     * Three code paths are taken:
-     *   - If both operands are single-digit, a native CPU division is used.
-     *   - If the numerator is strictly smaller than the denominator,
-     *     the quotient is 0 and the remainder equals the numerator.
-     *   - Otherwise, the operands are normalised, division is performed
-     *     (Algorithm D for multi-digit denominators, or @c div_1 for
-     *     single-digit denominators), and the remainder is un-normalised.
-     *
-     * @param numer Pointer to the numerator (little-endian digits).
-     * @param lnum   Number of digits in @p numer.
-     * @param denom Pointer to the denominator (little-endian digits).
-     * @param lden   Number of digits in @p denom.
-     * @param quot  Output buffer for the quotient.  Must have room for
-     *              at least @c max(lnum - lden + 1, 1) digits.
-     * @param rem   Output buffer for the remainder.  Must have room for
-     *              at least @c lden digits.
-     *
-     * @pre @p lden > 0 (no division by zero).
-     * @pre @p lnum > 0 (numerator is non-empty).
-     * @p numer, @p denom, @p quot, @p rem are not @c nullptr.
-     * @pre The most significant digit of @p denom (@p denom[lden-1]) is non-zero.
-     *
-     * @par Algorithm
-     *   Knuth's Algorithm D (TAOCP Vol. 2, 4.3.1, p. 272).
-     *   The denominator is first normalised by left-shifting so that its
-     *   most significant digit has its highest bit set.  The same shift
-     *   is applied to the numerator.  This guarantees that each trial
-     *   quotient digit @c q_hat satisfies @c q_hat <= BASE, reducing
-     *   correction steps.  After division, the remainder is shifted back
-     *   (un-normalised).
-     *
-     * @note This method is not @c const because future versions may
-     *       cache internal state.
+     * @param a Pointer to the digit array, or `nullptr` when @p lng is zero.
+     * @param lng Number of digits in @p a.
+     * @return Decimal representation without a sign or leading zeroes.
+     * @throws std::invalid_argument If @p a is null while @p lng is non-zero.
      */
-    void div(mpn_digit const * numer, unsigned lnum,
-             mpn_digit const * denom, unsigned lden,
-             mpn_digit * quot,
-             mpn_digit * rem);
+    [[nodiscard]] std::string to_string(Digit const* a, std::size_t lng) const;
 
     /**
-     * @brief Convert a multi-precision integer to a decimal string
-     *        using a caller-provided buffer.
-     *
-     * Calls @c to_string(const, unsigned) const and copies the result
-     * into @p buf, truncating to @p lbuf characters if necessary.
-     * The output is **not** null-terminated if truncated.
-     *
-     * @param a    Pointer to the number (little-endian digits).
-     * @param lng   Number of digits in @p a.
-     * @param buf  Caller-allocated output buffer.
-     * @param lbuf Size of @p buf in bytes (including space for NUL).
-     * @return Pointer to @p buf (the same pointer passed in).
-     *
-     * @pre @p buf is not @c nullptr and @p lbuf > 0.
-     *
-     * @warning If @p lbuf is too small, the result is silently truncated.
-     *          No NUL terminator is written in that case.
+     * @brief Compares two multi-precision integers represented by spans.
+     * @param a First little-endian operand.
+     * @param b Second little-endian operand.
+     * @return `-1`, `0`, or `1` according to the numerical ordering.
+     * @throws std::invalid_argument If a non-empty span has a null data pointer.
      */
-    char * to_string(mpn_digit const * a, unsigned lng,
-                     char * buf, unsigned lbuf) const;
+    [[nodiscard]] int compare(std::span<const Digit> a,
+                              std::span<const Digit> b) const;
 
     /**
-     * @brief Convert a multi-precision integer to a decimal string.
-     *
-     * Converts the number @p a of length @p lng into a base-10 string
-     * representation.  The conversion is performed by repeatedly dividing
-     * the number by 10^9 (which fits in a single @c mpn_digit), extracting
-     * 9 decimal digits per iteration, and assembling the groups from
-     * most significant to least significant.
-     *
-     * @param a   Pointer to the number (little-endian digits).
-     * @param lng  Number of digits in @p a.
-     * @return A @c std::string containing the decimal representation.
-     *         Returns "0" if @p lng is 0 or if all digits are zero.
-     *
-     * @pre @p a is not @c nullptr (unless @p lng is 0).
-     *
-     * @par Algorithm
-     *   The number is divided by 10^9 in each iteration using the
-     *   internal @c div_normalize / @c div_1 / @c div_unnormalize
-     *   pipeline.  Each remainder forms a group of up to 9 decimal
-     *   digits.  Groups are collected from least significant to
-     *   most significant, then concatenated in reverse order.
-     *   The most significant group is printed without leading zeros;
-     *   subsequent groups are zero-padded to exactly 9 digits.
+     * @brief Adds two integers represented by spans.
+     * @param a First little-endian operand.
+     * @param b Second little-endian operand.
+     * @param c Output span; it must contain at least `max(a.size(), b.size()) + 1` digits.
+     * @param result_size Receives the number of significant result digits.
+     * @throws std::invalid_argument If both operands are empty.
+     * @throws std::out_of_range If @p c is too small.
+     * @throws std::length_error If the required output size cannot be represented.
      */
-    std::string to_string(mpn_digit const * a, unsigned lng) const;
+    void add(std::span<const Digit> a, std::span<const Digit> b,
+             std::span<Digit> c, std::size_t& result_size) const;
+
+    /**
+     * @brief Subtracts the second span from the first span.
+     * @param a Minuend in little-endian order.
+     * @param b Subtrahend in little-endian order.
+     * @param c Output span with at least `max(a.size(), b.size())` elements.
+     * @param borrow Receives the final borrow (`0` or `1`).
+     * @throws std::invalid_argument If both operands are empty.
+     * @throws std::out_of_range If @p c is too small.
+     */
+    void sub(std::span<const Digit> a, std::span<const Digit> b,
+             std::span<Digit> c, Digit& borrow) const;
+
+    /**
+     * @brief Multiplies two integers represented by spans.
+     * @param a First factor.
+     * @param b Second factor.
+     * @param c Output span with at least `a.size() + b.size()` elements.
+     * @throws std::invalid_argument If either operand is empty.
+     * @throws std::out_of_range If @p c is too small.
+     * @throws std::length_error If the required output size overflows `std::size_t`.
+     */
+    void mul(std::span<const Digit> a, std::span<const Digit> b,
+             std::span<Digit> c) const;
+
+    /**
+     * @brief Divides two integers represented by spans.
+     * @param numer Numerator in little-endian order.
+     * @param denom Non-zero denominator in little-endian order.
+     * @param quot Output quotient span. It must be large enough for the quotient.
+     * @param rem Output remainder span with at least `denom.size()` elements.
+     * @throws std::invalid_argument If either operand is empty or the denominator
+     *         contains a leading zero digit.
+     * @throws std::out_of_range If an output span is too small.
+     */
+    void div(std::span<const Digit> numer, std::span<const Digit> denom,
+             std::span<Digit> quot, std::span<Digit> rem) const;
+
+    /**
+     * @brief Converts a span of little-endian digits to decimal text.
+     * @param a Digit span; an empty span represents zero.
+     * @return Decimal representation without a sign or leading zeroes.
+     * @throws std::invalid_argument If the span is non-empty but does not contain valid data.
+     */
+    [[nodiscard]] std::string to_string(std::span<const Digit> a) const;
 
 private:
-    /** @brief Internal scratch buffer type for multi-precision digits. */
-    using mpn_sbuffer = std::vector<mpn_digit>;
+    using mpn_sbuffer = std::vector<Digit>;
 
     /**
-     * @brief Normalise the numerator and denominator for division.
-     *
-     * Left-shifts both the numerator and the denominator by @c d bits
-     * so that the most significant digit of the normalised denominator
-     * has its highest bit set.  This is the normalisation step
-     * described in Knuth's Algorithm D.
-     *
-     * @param numer    Pointer to the original numerator.
-     * @param lnum      Number of digits in @p numer.
-     * @param denom    Pointer to the original denominator.
-     * @param lden      Number of digits in @p denom.
-     * @param n_numer  On return, the normalised numerator
-     *                 (length @c lnum + 1, with a possible extra
-     *                 zero digit at the top).
-     * @param n_denom   On return, the normalised denominator
-     *                 (length @c lden).
-     * @return The shift amount @c d (0 <= d < 32).
-     *
-     * @pre @p lden > 0 and @p denom[lden-1] != 0.
+     * @brief Normalizes numerator and denominator for Knuth's division algorithm.
+     * @param numer Input numerator in little-endian order.
+     * @param lnum Number of numerator digits.
+     * @param denom Input denominator in little-endian order.
+     * @param lden Number of denominator digits.
+     * @param n_numer Receives the normalized numerator and one extra high digit.
+     * @param n_denom Receives the normalized denominator.
+     * @return Number of left-shift positions applied during normalization.
+     * @throws std::logic_error If the normalization shift would be outside the digit width.
      */
-    unsigned div_normalize(mpn_digit const * numer, unsigned lnum,
-                         mpn_digit const * denom, unsigned lden,
-                         mpn_sbuffer & n_numer,
-                         mpn_sbuffer & n_denom) const;
+    std::size_t div_normalize(Digit const* numer, std::size_t lnum,
+                              Digit const* denom, std::size_t lden,
+                              mpn_sbuffer& n_numer,
+                              mpn_sbuffer& n_denom) const;
 
     /**
-     * @brief Reverse the normalisation shift applied to the remainder.
-     *
-     * Right-shifts the remainder (stored in the low-order digits of
-     * @p numer) by @c d bits to undo the effect of @c div_normalize.
-     *
-     * @param numer  The normalised numerator buffer; the low
-     *               @c denom.size() digits hold the remainder.
-     * @param denom  The normalised denominator (used only for its
-     *               size to determine how many remainder digits to
-     *               extract).
-     * @param d      The shift amount returned by @c div_normalize.
-     * @param rem    Output buffer for the un-normalised remainder.
-     *               Must have room for at least @c denom.size() digits.
-     *
-     * @pre @p d < @c DIGIT_BITS (i.e. d < 32 for 32-bit digits).
-     * @pre @p denom.size() > 0.
+     * @brief Restores the original scale of a remainder after division.
+     * @param numer Normalized numerator/remainder workspace.
+     * @param denom Normalized denominator workspace.
+     * @param d Normalization shift returned by div_normalize().
+     * @param rem Destination remainder buffer.
      */
-    void div_unnormalize(mpn_sbuffer & numer, mpn_sbuffer & denom,
-                         unsigned d, mpn_digit * rem) const;
+    void div_unnormalize(mpn_sbuffer const& numer,
+                         mpn_sbuffer const& denom,
+                         std::size_t d, Digit* rem) const;
 
     /**
-     * @brief Divide a multi-precision number by a single digit.
-     *
-     * Performs long division of @p numer by the single-digit
-     * @p denom, writing the quotient into @p quot.  The numerator
-     * is consumed (modified in place) during the computation.
-     *
-     * @param numer  The normalised numerator (modified in place;
-     *               the low digits are overwritten with intermediate
-     *               remainders during the computation).
-     * @param denom  A single normalised denominator digit.
-     * @param quot   Output buffer for the quotient.  Must have room
-     *               for at least @c numer.size() - 1 digits.
-     *
-     * @pre @p denom != 0.
-     * @pre @p numer.size() >= 1.
-     *
-     * @par Algorithm
-     *   Processes digits from most significant to least significant.
-     *   At each step, a two-digit window is formed from the current
-     *   and previous digits, divided by @p denom to obtain the
-     *   trial quotient digit and remainder.  Borrow correction is
-     *   applied when the trial quotient overshoots.
+     * @brief Divides a mutable digit buffer by a single normalized digit.
+     * @param numer Numerator workspace; it is replaced by the quotient/remainder workspace.
+     * @param denom Single-digit divisor.
+     * @param quot Destination quotient buffer.
      */
-    void div_1(mpn_sbuffer & numer, mpn_digit denom,
-               mpn_digit * quot) const;
+    void div_1(mpn_sbuffer& numer, Digit denom, Digit* quot) const;
 
     /**
-     * @brief Divide a multi-precision number by a multi-precision number
-     *        (Knuth's Algorithm D core loop).
-     *
-     * Performs the main loop of Knuth's Algorithm D for divisors of
-     * length >= 2.  For each quotient digit, a trial quotient @c q_hat
-     * is estimated from the two most significant digits of the current
-     * numerator window and the most significant digit of the
-     * denominator, then refined using the next denominator digit.
-     * The trial product @c q_hat * denom is subtracted from the
-     * numerator window; if a borrow occurs, the quotient digit is
-     * decremented and the denominator is added back.
-     *
-     * @param numer  The normalised numerator (modified in place).
-     *               Must have length @c m + n where @c m is the
-     *               number of quotient digits and @c n is the
-     *               denominator length.
-     * @param denom  The normalised denominator (length @c n >= 2).
-     * @param quot   Output buffer for the quotient (@c m digits).
-     * @param rem    Output buffer for the remainder (@c n digits).
-     * @param ms     Scratch buffer for the trial product
-     *               (@c q_hat * denom).  Resized to @c n + 1 internally.
-     * @param ab     Scratch buffer for the add-back correction.
-     *               Resized to @c n + 2 internally.
-     *
-     * @pre @p denom.size() > 1.
-     * @pre @p numer.size() == (@p numer.size() - @p denom.size()) + @p denom.size().
-     *
-     * @par Algorithm
-     *   Knuth's Algorithm D (TAOCP Vol. 2, 4.3.1, p. 272–276).
-     *   The trial quotient digit @c q_hat is computed as
-     *   @c (numer[j+n] * BASE + numer[j+n-1]) / denom[n-1],
-     *   then corrected by testing whether
-     *   @c q_hat * denom[n-2] > r_hat * BASE + numer[j+n-2].
-     *   If so, @c q_hat is decremented.  The product @c q_hat * denom
-     *   is then subtracted from the numerator window; a final
-     *   correction adds back @p denom if the subtraction borrows.
+     * @brief Performs the multi-digit step of Knuth's Algorithm D.
+     * @param numer Mutable normalized numerator workspace.
+     * @param denom Normalized multi-digit denominator.
+     * @param quot Destination quotient buffer.
+     * @param ms Scratch buffer for multiplication of the divisor by a trial quotient digit.
+     * @param ab Scratch buffer used when a correction/add-back step is required.
+     * @throws std::invalid_argument If the denominator contains fewer than two digits.
      */
-    void div_n(mpn_sbuffer & numer, mpn_sbuffer const & denom,
-               mpn_digit * quot, mpn_digit * rem,
-               mpn_sbuffer & ms, mpn_sbuffer & ab) const;
+    void div_n(mpn_sbuffer& numer, mpn_sbuffer const& denom,
+               Digit* quot, mpn_sbuffer& ms,
+               mpn_sbuffer& ab) const;
 };
+
+template<mpn_detail::MpnDigit Digit>
+int mpn_manager<Digit>::compare(Digit const* a, std::size_t lnga,
+                                Digit const* b, std::size_t lngb) const {
+    if ((lnga != 0 && a == nullptr) || (lngb != 0 && b == nullptr))
+        throw std::invalid_argument("compare: non-empty operand has a null pointer");
+    std::size_t j = std::max(lnga, lngb);
+    for (; j-- > 0;) {
+        const Digit u = (j < lnga) ? a[j] : Digit(0);
+        const Digit v = (j < lngb) ? b[j] : Digit(0);
+        if (u > v) return 1;
+        if (u < v) return -1;
+    }
+    return 0;
+}
+
+template<mpn_detail::MpnDigit Digit>
+void mpn_manager<Digit>::add(Digit const* a, std::size_t lnga,
+                             Digit const* b, std::size_t lngb,
+                             Digit* c, std::size_t lngc_alloc,
+                             std::size_t* plngc) const {
+    const std::size_t len = std::max(lnga, lngb);
+    if (plngc == nullptr) throw std::invalid_argument("add: plngc must not be null");
+    if (len == 0) throw std::invalid_argument("add: both operands are empty");
+    if (len == std::numeric_limits<std::size_t>::max())
+        throw std::length_error("add: result size overflows std::size_t");
+    if (c == nullptr) throw std::invalid_argument("add: output buffer must not be null");
+    if (lngc_alloc < len + 1) throw std::out_of_range("add: output buffer is too small");
+    if (lnga > 0 && a == nullptr) throw std::invalid_argument("add: first operand is null");
+    if (lngb > 0 && b == nullptr) throw std::invalid_argument("add: second operand is null");
+
+    Digit carry = 0;
+    for (std::size_t j = 0; j < len; ++j) {
+        const Digit u = (j < lnga) ? a[j] : Digit(0);
+        const Digit v = (j < lngb) ? b[j] : Digit(0);
+        const wide_type t = static_cast<wide_type>(wide_type(u) + wide_type(v)) + wide_type(carry);
+        c[j] = static_cast<Digit>(t);
+        carry = static_cast<Digit>(t >> digit_bits);
+    }
+    c[len] = carry;
+
+    std::size_t& out_len = *plngc;
+    out_len = len + 1;
+    while (out_len > 1 && c[out_len - 1] == 0) --out_len;
+}
+
+template<mpn_detail::MpnDigit Digit>
+void mpn_manager<Digit>::sub(Digit const* a, std::size_t lnga,
+                             Digit const* b, std::size_t lngb,
+                             Digit* c, Digit* pborrow) const {
+    if (pborrow == nullptr) throw std::invalid_argument("sub: pborrow must not be null");
+    if (std::max(lnga, lngb) == 0) throw std::invalid_argument("sub: both operands are empty");
+    if (c == nullptr) throw std::invalid_argument("sub: output buffer must not be null");
+    if (lnga > 0 && a == nullptr) throw std::invalid_argument("sub: first operand is null");
+    if (lngb > 0 && b == nullptr) throw std::invalid_argument("sub: second operand is null");
+    const std::size_t len = std::max(lnga, lngb);
+    Digit borrow = 0;
+
+    for (std::size_t j = 0; j < len; ++j) {
+        const Digit u = (j < lnga) ? a[j] : Digit(0);
+        const Digit v = (j < lngb) ? b[j] : Digit(0);
+        const wide_type subtrahend = wide_type(v) + wide_type(borrow);
+        c[j] = static_cast<Digit>(wide_type(u) - subtrahend);
+        borrow = (wide_type(u) < subtrahend) ? Digit(1) : Digit(0);
+    }
+    *pborrow = borrow;
+}
+
+template<mpn_detail::MpnDigit Digit>
+void mpn_manager<Digit>::mul(Digit const* a, std::size_t lnga,
+                             Digit const* b, std::size_t lngb,
+                             Digit* c) const {
+    if (lnga == 0 || lngb == 0) throw std::invalid_argument("mul: operands must not be empty");
+    if (lnga > std::numeric_limits<std::size_t>::max() - lngb)
+        throw std::length_error("mul: result size overflows std::size_t");
+    if (c == nullptr) throw std::invalid_argument("mul: output buffer must not be null");
+    if (a == nullptr || b == nullptr) throw std::invalid_argument("mul: operands must not be null");
+    for (std::size_t i = 0; i < lnga + lngb; ++i) c[i] = 0;
+
+    for (std::size_t j = 0; j < lngb; ++j) {
+        const Digit v = b[j];
+        if (v == 0) continue;
+
+        Digit carry = 0;
+        for (std::size_t i = 0; i < lnga; ++i) {
+            const wide_type t = static_cast<wide_type>(wide_type(a[i]) * wide_type(v) +
+                                wide_type(c[i + j])) + wide_type(carry);
+            c[i + j] = static_cast<Digit>(t);
+            carry = static_cast<Digit>(t >> digit_bits);
+        }
+        c[j + lnga] = carry;
+    }
+}
+
+template<mpn_detail::MpnDigit Digit>
+void mpn_manager<Digit>::div(Digit const* numer, std::size_t lnum,
+                             Digit const* denom, std::size_t lden,
+                             Digit* quot, Digit* rem) const {
+    if (lden == 0) throw std::invalid_argument("div: denominator must not be empty");
+    if (lnum == 0) throw std::invalid_argument("div: numerator must not be empty");
+    if (numer == nullptr || denom == nullptr) throw std::invalid_argument("div: input must not be null");
+    if (quot == nullptr || rem == nullptr) throw std::invalid_argument("div: output must not be null");
+    if (denom[lden - 1] == 0) throw std::invalid_argument("div: denominator has a leading zero");
+
+    if (lnum == 1 && lden == 1) {
+        quot[0] = static_cast<Digit>(numer[0] / denom[0]);
+        rem[0] = static_cast<Digit>(numer[0] % denom[0]);
+        return;
+    }
+
+    if (lnum < lden ||
+        (lnum == lden && numer[lnum - 1] < denom[lden - 1])) {
+        quot[0] = 0;
+        for (std::size_t i = 0; i < lden; ++i)
+            rem[i] = (i < lnum) ? numer[i] : Digit(0);
+        return;
+    }
+
+    mpn_sbuffer u, v, t_ms, t_ab;
+    const std::size_t d = div_normalize(numer, lnum, denom, lden, u, v);
+    if (lden == 1)
+        div_1(u, v[0], quot);
+    else
+        div_n(u, v, quot, t_ms, t_ab);
+    div_unnormalize(u, v, d, rem);
+}
+
+template<mpn_detail::MpnDigit Digit>
+std::size_t mpn_manager<Digit>::div_normalize(
+    Digit const* numer, std::size_t lnum,
+    Digit const* denom, std::size_t lden,
+    mpn_sbuffer& n_numer,
+    mpn_sbuffer& n_denom) const {
+    std::size_t d = 0;
+    while (((denom[lden - 1] << d) & mpn_detail::top_bit_v<Digit>) == 0) ++d;
+    if (d >= digit_bits) throw std::logic_error("div_normalize: invalid normalization shift");
+
+    n_numer.resize(lnum + 1);
+    n_denom.resize(lden);
+
+    if (d == 0) {
+        n_numer[lnum] = 0;
+        for (std::size_t i = 0; i < lnum; ++i) n_numer[i] = numer[i];
+        for (std::size_t i = 0; i < lden; ++i) n_denom[i] = denom[i];
+        return 0;
+    }
+
+    n_numer[lnum] = mpn_detail::first_bits<Digit>(d, numer[lnum - 1]);
+    for (std::size_t i = lnum - 1; i > 0; --i)
+        n_numer[i] = static_cast<Digit>((wide_type(numer[i]) << d) |
+                                         wide_type(mpn_detail::first_bits<Digit>(d, numer[i - 1])));
+    n_numer[0] = static_cast<Digit>(wide_type(numer[0]) << d);
+
+    for (std::size_t i = lden - 1; i > 0; --i)
+        n_denom[i] = static_cast<Digit>((wide_type(denom[i]) << d) |
+                                         wide_type(mpn_detail::first_bits<Digit>(d, denom[i - 1])));
+    n_denom[0] = static_cast<Digit>(wide_type(denom[0]) << d);
+
+    return d;
+}
+
+template<mpn_detail::MpnDigit Digit>
+void mpn_manager<Digit>::div_unnormalize(
+    mpn_sbuffer const& numer, mpn_sbuffer const& denom,
+    std::size_t d, Digit* rem) const {
+    const std::size_t denom_size = denom.size();
+    if (denom_size == 0) return;
+
+    if (d == 0) {
+        for (std::size_t i = 0; i < denom_size; ++i) rem[i] = numer[i];
+        return;
+    }
+
+    const std::size_t limit = denom_size - 1;
+    for (std::size_t i = 0; i < limit; ++i) {
+        rem[i] = static_cast<Digit>(
+            (wide_type(numer[i]) >> d) |
+            (wide_type(mpn_detail::last_bits<Digit>(d, numer[i + 1])) << (digit_bits - d)));
+    }
+    rem[limit] = static_cast<Digit>(numer[limit] >> d);
+}
+
+template<mpn_detail::MpnDigit Digit>
+void mpn_manager<Digit>::div_1(mpn_sbuffer& numer, Digit denom, Digit* quot) const {
+    wide_type q_hat, temp, ms;
+
+    for (std::size_t j = static_cast<std::size_t>(numer.size() - 1); j > 0; --j) {
+        temp = static_cast<wide_type>(
+            (wide_type(numer[j]) << digit_bits) | wide_type(numer[j - 1]));
+        q_hat = static_cast<wide_type>(temp / wide_type(denom));
+        ms = static_cast<wide_type>(temp - q_hat * wide_type(denom));
+
+        numer[j - 1] = static_cast<Digit>(ms);
+        numer[j] = static_cast<Digit>(ms >> digit_bits);
+        quot[j - 1] = static_cast<Digit>(q_hat);
+
+    }
+}
+
+template<mpn_detail::MpnDigit Digit>
+void mpn_manager<Digit>::div_n(
+    mpn_sbuffer& numer, mpn_sbuffer const& denom,
+    Digit* quot, mpn_sbuffer& ms, mpn_sbuffer& ab) const {
+    if (denom.size() <= 1) throw std::invalid_argument("div_n: denominator must contain at least two digits");
+
+    const std::size_t m = static_cast<std::size_t>(numer.size() - denom.size());
+    const std::size_t n = denom.size();
+
+    ms.resize(n + 1);
+
+    wide_type q_hat, temp, r_hat;
+    Digit borrow;
+
+    for (std::size_t j = m; j-- > 0;) {
+        temp = static_cast<wide_type>(
+            (wide_type(numer[j + n]) << digit_bits) | wide_type(numer[j + n - 1]));
+        q_hat = static_cast<wide_type>(temp / wide_type(denom[n - 1]));
+        r_hat = static_cast<wide_type>(temp % wide_type(denom[n - 1]));
+
+        while (q_hat >= base ||
+               q_hat * wide_type(denom[n - 2]) >
+                   (r_hat << digit_bits) + wide_type(numer[j + n - 2])) {
+            --q_hat;
+            r_hat += wide_type(denom[n - 1]);
+            if (r_hat >= base) break;
+        }
+
+        const Digit q_small = static_cast<Digit>(q_hat);
+        mul(&q_small, 1, denom.data(), n, ms.data());
+        sub(&numer[j], n + 1, ms.data(), n + 1, &numer[j], &borrow);
+        quot[j] = q_small;
+
+        if (borrow) {
+            --quot[j];
+            ab.resize(n + 2);
+            std::size_t real_size = 0;
+            add(denom.data(), n, &numer[j], n + 1,
+                ab.data(), n + 2, &real_size);
+            for (std::size_t i = 0; i < n + 1; ++i)
+                numer[j + i] = ab[i];
+        }
+    }
+}
+
+template<mpn_detail::MpnDigit Digit>
+std::string mpn_manager<Digit>::to_string(Digit const* a, std::size_t lng) const {
+    if (lng > 0 && a == nullptr) throw std::invalid_argument("to_string: input must not be null");
+    if (lng == 0) return "0";
+
+    bool all_zero = true;
+    for (std::size_t i = 0; i < lng; ++i) {
+        if (a[i] != 0) { all_zero = false; break; }
+    }
+    if (all_zero) return "0";
+
+    constexpr Digit decimal_base = mpn_detail::decimal_traits<Digit>::base;
+    constexpr std::size_t decimal_digits = mpn_detail::decimal_traits<Digit>::digits;
+
+    mpn_sbuffer temp(a, a + lng);
+    mpn_sbuffer t_numer, t_denom;
+    Digit rem = 0;
+    std::vector<Digit> groups;
+
+    while (!temp.empty() && (temp.size() > 1 || temp[0] != 0)) {
+        const std::size_t d = div_normalize(temp.data(), temp.size(),
+                                         &decimal_base, 1, t_numer, t_denom);
+        div_1(t_numer, t_denom[0], temp.data());
+        div_unnormalize(t_numer, t_denom, d, &rem);
+        groups.push_back(rem);
+
+        while (!temp.empty() && temp.back() == 0) temp.pop_back();
+    }
+
+    std::string result;
+    result.reserve(groups.size() * decimal_digits);
+    result += std::to_string(groups.back());
+
+    for (std::size_t i = groups.size() - 1; i > 0; --i) {
+        const std::string group = std::to_string(groups[i - 1]);
+        result.append(decimal_digits - group.size(), '0');
+        result += group;
+    }
+    return result;
+}
+
+template<mpn_detail::MpnDigit Digit>
+int mpn_manager<Digit>::compare(std::span<const Digit> a, std::span<const Digit> b) const {
+    if ((a.size() != 0 && a.data() == nullptr) || (b.size() != 0 && b.data() == nullptr))
+        throw std::invalid_argument("compare(span): non-empty span has a null data pointer");
+    return compare(a.data(), a.size(),
+                   b.data(), b.size());
+}
+
+template<mpn_detail::MpnDigit Digit>
+void mpn_manager<Digit>::add(std::span<const Digit> a, std::span<const Digit> b,
+                             std::span<Digit> c, std::size_t& result_size) const {
+    const std::size_t max_size = std::max(a.size(), b.size());
+    if (max_size == std::numeric_limits<std::size_t>::max())
+        throw std::length_error("add(span): result size overflows std::size_t");
+    const std::size_t required = max_size + 1;
+    if (c.size() < required) throw std::out_of_range("add(span): output buffer is too small");
+    std::size_t out = 0;
+    add(a.data(), a.size(), b.data(), b.size(),
+        c.data(), c.size(), &out);
+    result_size = out;
+}
+
+template<mpn_detail::MpnDigit Digit>
+void mpn_manager<Digit>::sub(std::span<const Digit> a, std::span<const Digit> b,
+                             std::span<Digit> c, Digit& borrow) const {
+    const std::size_t required = std::max(a.size(), b.size());
+    if (c.size() < required) throw std::out_of_range("sub(span): output buffer is too small");
+    sub(a.data(), a.size(), b.data(), b.size(),
+        c.data(), &borrow);
+}
+
+template<mpn_detail::MpnDigit Digit>
+void mpn_manager<Digit>::mul(std::span<const Digit> a, std::span<const Digit> b,
+                             std::span<Digit> c) const {
+    if (a.size() > std::numeric_limits<std::size_t>::max() - b.size())
+        throw std::length_error("mul(span): result size overflows std::size_t");
+    if (c.size() < a.size() + b.size())
+        throw std::out_of_range("mul(span): output buffer is too small");
+    mul(a.data(), a.size(), b.data(), b.size(), c.data());
+}
+
+template<mpn_detail::MpnDigit Digit>
+void mpn_manager<Digit>::div(std::span<const Digit> numer, std::span<const Digit> denom,
+                             std::span<Digit> quot, std::span<Digit> rem) const {
+    const std::size_t required_quot =
+        numer.size() >= denom.size() ? numer.size() - denom.size() + 1 : 1;
+    if (quot.size() < required_quot)
+        throw std::out_of_range("div(span): quotient buffer is too small");
+    if (rem.size() < denom.size())
+        throw std::out_of_range("div(span): remainder buffer is too small");
+    div(numer.data(), numer.size(), denom.data(), denom.size(), quot.data(), rem.data());
+}
+
+template<mpn_detail::MpnDigit Digit>
+std::string mpn_manager<Digit>::to_string(std::span<const Digit> a) const {
+    return to_string(a.data(), a.size());
+}

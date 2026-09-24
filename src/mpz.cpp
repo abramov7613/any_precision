@@ -717,7 +717,7 @@ void mpz_manager::big_add_sub(mpz const & a, mpz const & b, mpz & c) {
     mpz_stack tmp;
     if (SUB)
         sign_b = -sign_b;
-    unsigned real_sz;
+    std::size_t real_sz;
     if (ca.sign() == sign_b) {
         unsigned sz  = std::max(ca.cell()->m_size, cb.cell()->m_size)+1;
         allocate_if_needed(tmp, sz);
