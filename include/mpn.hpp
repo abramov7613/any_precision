@@ -1,5 +1,31 @@
+/**
+ * @file mpn.h
+ * @brief Multi-precision non-negative integer arithmetic library.
+ *
+ * This header declares the class, which provides
+ * arbitrary-precision arithmetic operations on non-negative
+ * integers stored as arrays of numbers.
+ *
+ * All operations follow algorithms described in Donald E. Knuth,
+ * "The Art of Computer Programming", Vol. 2, Section 4.3.1–4.3.3.
+ *
+ * @par Digit representation
+ *   Numbers are stored as arrays of unsigned int - 8, 16 or 32 bits
+ *   in **little-endian order**: index 0 holds the least significant
+ *   digit, index @c lng-1 holds the most significant digit.
+ *   A number of length @c lng occupies @c lng consecutive elements
+ *   of an @c MpnDigit array.  The most significant digit
+ *   (at index @c lng-1) is assumed to be non-zero unless the number
+ *   itself is zero.
+ *
+ * @par Conventions
+ *   - Lengths are expressed in number of @c MpnDigit elements.
+ *   - Caller is responsible for allocating sufficiently large output
+ *     buffers.
+ *   - Methods do not allocate memory for the primary operands;
+ *     internal scratch space is managed via @c std::vector.
+ */
 #pragma once
-
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -10,8 +36,6 @@
 #include <type_traits>
 #include <vector>
 
-#include <boost/multiprecision/cpp_int.hpp>
-
 namespace mpn_detail {
 
 template<class T>
@@ -21,7 +45,6 @@ concept MpnDigit =
     !std::is_same_v<T, bool>;
 
 // The arithmetic algorithms need a type that can hold two digits plus carry.
-// Standard C++20 has no uint128_t, so uint64_t uses Boost's uint128_t.
 template<class T>
 struct wide_type;
 
@@ -36,10 +59,6 @@ struct wide_type<T> { using type = std::uint32_t; };
 template<MpnDigit T>
 requires (std::numeric_limits<T>::digits > 16 && std::numeric_limits<T>::digits <= 32)
 struct wide_type<T> { using type = std::uint64_t; };
-
-template<MpnDigit T>
-requires (std::numeric_limits<T>::digits > 32 && std::numeric_limits<T>::digits <= 64)
-struct wide_type<T> { using type = boost::multiprecision::uint128_t; };
 
 template<MpnDigit T>
 using wide_type_t = typename wide_type<T>::type;
@@ -90,8 +109,7 @@ struct decimal_traits {
 
 /**
  * @brief Multi-precision unsigned integer arithmetic over configurable digits.
- * @tparam Digit Unsigned integral digit type. Supported widths are 8, 16, 32 and 64 bits.
- * @note The 64-bit specialization uses Boost.Multiprecision::uint128_t for intermediate arithmetic.
+ * @tparam Digit Unsigned integral digit type. Supported widths are 8, 16, 32 bits.
  */
 template<mpn_detail::MpnDigit Digit = std::uint32_t>
 class mpn_manager {

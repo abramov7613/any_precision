@@ -1,40 +1,44 @@
-cmake_minimum_required(VERSION 3.31)
+cmake_minimum_required(VERSION 3.21)
 
-project(any_precision LANGUAGES CXX)
+project(ez3i) # extracted_z3_integer
 
-find_package(Boost 1.82 CONFIG QUIET)
-if(NOT Boost_FOUND)
-  message(STATUS "Boost not found or version too old, fetching Boost::multiprecision")
-  include(FetchContent)
-  FetchContent_Declare(boost_multiprecision
-      URL https://github.com/boostorg/multiprecision/archive/refs/tags/Boost_1_92_0.tar.gz
-      URL_HASH SHA256=d53a907779b1ba88c80c15953c24106bf92b1b4731678441a8655e527c9d3df1
-  )
-  FetchContent_MakeAvailable(boost_multiprecision)
-  if(NOT TARGET boost_multiprecision)
-      message(FATAL_ERROR "Boost::multiprecision not found")
-  endif()
+option(BUILD_SHARED_LIBS "Build shared library (ON) or static (OFF)" OFF)
+option(EZ3I_BUILD_TESTS "Build unit tests" ${PROJECT_IS_TOP_LEVEL})
+option(EZ3I_INSTALL "Generate install targets" ${PROJECT_IS_TOP_LEVEL})
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+if(PROJECT_IS_TOP_LEVEL)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 endif()
 
-add_library(${PROJECT_NAME} STATIC
-  src/mpn.h
-  src/mpz.h
-  src/mpz.cpp
-)
-
-target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
-
+add_library(${PROJECT_NAME} src/mpz.cpp)
 target_include_directories(${PROJECT_NAME}
     PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
 )
-
-if(Boost_FOUND)
-  target_include_directories(${PROJECT_NAME} PRIVATE ${Boost_INCLUDE_DIRS})
-else()
-  target_link_libraries(${PROJECT_NAME} PRIVATE boost_multiprecision)
+target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
+if(BUILD_SHARED_LIBS)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE EZ3I_EXPORTS)
 endif()
 
+if(EZ3I_BUILD_TESTS AND PROJECT_IS_TOP_LEVEL)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
 
-enable_testing()
-add_subdirectory(tests)
+if(EZ3I_INSTALL)
+    include(GNUInstallDirs)
+
+    install(TARGETS ${PROJECT_NAME}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    )
+
+    install(DIRECTORY include/
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    )
+endif()

@@ -1,20 +1,33 @@
 #pragma once
-
 #include <climits>
 #include <string>
 #include <cassert>
 #include <vector>
-#include "mpn.h"
+#include "mpn.hpp"
 
-unsigned u_gcd(unsigned u, unsigned v);
-uint64_t u64_gcd(uint64_t u, uint64_t v);
+#if defined(_WIN32)
+  #ifdef EZ3I_EXPORTS
+    #define EZ3I_API __declspec(dllexport)
+  #else
+    #define EZ3I_API __declspec(dllimport)
+  #endif
+#else
+  #if defined(EZ3I_EXPORTS) && defined(__GNUC__)
+    #define EZ3I_API __attribute__((visibility("default")))
+  #else
+    #define EZ3I_API
+  #endif
+#endif
+
+EZ3I_API unsigned u_gcd(unsigned u, unsigned v);
+EZ3I_API uint64_t u64_gcd(uint64_t u, uint64_t v);
 
 class mpz_manager;
 
 typedef unsigned int digit_t;
 typedef int qr_mode;
 
-struct mpz_cell {
+struct EZ3I_API mpz_cell {
     unsigned  m_size;
     unsigned  m_capacity;
     digit_t   m_digits[];
@@ -31,7 +44,7 @@ struct mpz_cell {
 enum mpz_kind { mpz_small = 0, mpz_large = 1};
 enum mpz_owner { mpz_self = 0, mpz_ext = 1};
 
-class mpz {
+class EZ3I_API mpz {
     typedef mpz_cell mpz_type;
 
 protected:
@@ -72,19 +85,9 @@ public:
     inline int sign() const { assert(!is_small()); return m_val; }
 }; // class mpz
 
-class mpz_stack : public mpz {
-    static const unsigned capacity = 8;
-    unsigned char m_bytes[sizeof(mpz_cell) + sizeof(digit_t) * capacity];
-public:
-    mpz_stack():mpz(reinterpret_cast<mpz_cell*>(m_bytes)) {
-        m_ptr->m_capacity = capacity;
-        m_ptr->m_size = 0;
-    }
-}; // class mpz_stack
-
 inline void swap(mpz & m1, mpz & m2) noexcept { m1.swap(m2); }
 
-class mpz_manager {
+class EZ3I_API mpz_manager {
     mpn_manager<digit_t> m_mpn_manager;
 
     // 64-bit machine?

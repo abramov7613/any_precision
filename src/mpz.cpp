@@ -55,6 +55,17 @@ static uint64_t _trailing_zeros64(uint64_t x) {
 #define _bit_max(x, y) (x - ((x - y) & ((int)(x - y) >> 31)))
 
 
+class mpz_stack : public mpz {
+    static const unsigned capacity = 8;
+    unsigned char m_bytes[sizeof(mpz_cell) + sizeof(digit_t) * capacity];
+public:
+    mpz_stack():mpz(reinterpret_cast<mpz_cell*>(m_bytes)) {
+        m_ptr->m_capacity = capacity;
+        m_ptr->m_size = 0;
+    }
+}; // class mpz_stack
+
+
 template<typename Manager>
 class _scoped_numeral {
 public:
