@@ -6,8 +6,10 @@
 #include "mpn.hpp"
 
 #if defined(_WIN32)
-  #ifdef EZ3I_EXPORTS
+  #if defined(EZ3I_EXPORTS)
     #define EZ3I_API __declspec(dllexport)
+  #elif defined(EZ3I_STATIC)
+    #define EZ3I_API
   #else
     #define EZ3I_API __declspec(dllimport)
   #endif

@@ -13,14 +13,18 @@ if(PROJECT_IS_TOP_LEVEL)
 endif()
 
 add_library(${PROJECT_NAME} src/mpz.cpp)
+
 target_include_directories(${PROJECT_NAME}
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
 )
+
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 if(BUILD_SHARED_LIBS)
     target_compile_definitions(${PROJECT_NAME} PRIVATE EZ3I_EXPORTS)
+else()
+    target_compile_definitions(${PROJECT_NAME} PUBLIC EZ3I_STATIC)
 endif()
 
 if(EZ3I_BUILD_TESTS AND PROJECT_IS_TOP_LEVEL)
